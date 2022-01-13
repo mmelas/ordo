@@ -22,6 +22,9 @@ pub struct Queue {
     pub pending_transactions: [i64; 1000],
 }
 
+unsafe impl Send for Queue {}
+unsafe impl Sync for Queue {}
+
 /*
  * Local data structure for each consumer in order 
  * to obtain a slice of the queue and dequeue without 
@@ -29,7 +32,7 @@ pub struct Queue {
  */
 pub struct Slice<'a> {
     pub queue: &'a mut Queue, // Revise lifetime params
-    offset: usize,
+    pub offset: usize,
     curr_i: usize,
     pub len: usize,
 }
@@ -127,9 +130,12 @@ impl Queue {
                 cond = self.last_commited_tx.compare_exchange(last_tx, max_tx_id, Ordering::SeqCst, Ordering::SeqCst).is_ok();
                 if cond {
                     self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % self.buffer.len(), Ordering::SeqCst);
-                    for i in tx_id..max_tx_id + 1 {
+                    let mut i = tx_id;
+                    while i != max_tx_id {
                         self.pending_transactions[i] = 0;
+                        i = (i + 1) % THREADS as usize;
                     }
+                    self.pending_transactions[max_tx_id] = 0;
                 }
             }
             if cond {

@@ -1,12 +1,12 @@
-use std::sync::{Arc};
+use std::sync::{Arc, Mutex};
 use std::cell::UnsafeCell;
 use std::thread;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::collections::HashMap;
-use crate::fifo_mutex3;
+use crate::fifo;
 
 pub fn run_test() {
-    let q = UnsafeCell::new(fifo_mutex3::Queue{..Default::default()});
+    let q = UnsafeCell::new(fifo::Queue{..Default::default()});
 
     
     let ptr_wslice = q.get();
@@ -30,8 +30,8 @@ pub fn run_test() {
     let cnt_clone4 = counter.clone();
     let cnt_clone5 = counter.clone();
 
-    let mut threads = vec![];
-    threads.push(thread::spawn(move || {
+    let mut prod_threads = vec![];
+    prod_threads.push(thread::spawn(move || {
         match wslice {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -50,7 +50,7 @@ pub fn run_test() {
         }
     }));
 
-    threads.push(thread::spawn(move || {
+    prod_threads.push(thread::spawn(move || {
         match wslice2 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -69,7 +69,7 @@ pub fn run_test() {
         }
     }));
 
-    threads.push(thread::spawn(move || {
+    prod_threads.push(thread::spawn(move || {
         match wslice3 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -88,7 +88,7 @@ pub fn run_test() {
         }
     }));
 
-    threads.push(thread::spawn(move || {
+    prod_threads.push(thread::spawn(move || {
         match wslice4 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -107,7 +107,7 @@ pub fn run_test() {
         }
     }));
 
-    threads.push(thread::spawn(move || {
+    prod_threads.push(thread::spawn(move || {
         match wslice5 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -127,23 +127,76 @@ pub fn run_test() {
     }));
 
 
-    for th in threads {
+    for th in prod_threads {
         let _ = th.join();
     }
     /*
      * Consumer
      */
-    let ptr_wslice = q.get();
-    let mut wslice = unsafe{ (*ptr_wslice).dequeue_multiple(1000) };
-    let mut contains : HashMap<i64, bool> = HashMap::new();
-    for i in 0..wslice.len {
-        contains.insert(wslice.queue.buffer[i], true);
- //       println!("Iteration : {}, Item : {}", i, wslice.queue.buffer[i]);
+
+    let mut cons_threads = vec![];
+    let contains = Arc::new(Mutex::new(HashMap::new()));
+    let contains2 = contains.clone();
+    let contains3 = contains.clone();
+    let contains4 = contains.clone();
+    let contains5 = contains.clone();
+    let ptr_slice = q.get();
+    let mut slice = unsafe{ (*ptr_slice).dequeue_multiple(200) };
+    let mut slice2 = unsafe{ (*ptr_slice).dequeue_multiple(200) };
+    let mut slice3 = unsafe{ (*ptr_slice).dequeue_multiple(200) };
+    let mut slice4 = unsafe{ (*ptr_slice).dequeue_multiple(399) };
+
+    cons_threads.push(thread::spawn(move || {
+        let offset = slice.offset;
+        println!("{}", offset);
+        for i in 0..slice.len {
+            let mut contains = contains2.lock().unwrap();
+            contains.insert(slice.queue.buffer[i + offset] + 1, true);
+    //        println!("Iteration : {}, Item : {}", i, slice.queue.buffer[i + offset]);
+        }
+        slice.commit();
+    }));
+
+    cons_threads.push(thread::spawn(move || {
+        let offset = slice2.offset;
+        println!("{}", offset);
+        for i in 0..slice2.len {
+            let mut contains = contains3.lock().unwrap();
+            contains.insert(slice2.queue.buffer[i + offset] + 1, true);
+    //        println!("Iteration : {}, Item : {}", i, slice2.queue.buffer[i +  offset]);
+        }
+        slice2.commit();
+    }));
+
+    cons_threads.push(thread::spawn(move || {
+        let offset = slice3.offset;
+        println!("{}", offset);
+        for i in 0..slice3.len {
+            let mut contains = contains4.lock().unwrap();
+            contains.insert(slice3.queue.buffer[i + offset] + 1, true);
+     //       println!("Iteration : {}, Item : {}", i, slice3.queue.buffer[i + offset]);
+        }
+        slice3.commit();
+    }));
+
+    cons_threads.push(thread::spawn(move || {
+        let offset = slice4.offset;
+        println!("{}", offset);
+        for i in 0..slice4.len {
+            let mut contains = contains5.lock().unwrap();
+            contains.insert(slice4.queue.buffer[i + offset] + 1, true);
+    //        println!("Iteration : {}, Item : {}", i, slice4.queue.buffer[i + offset]);
+        }
+        slice4.commit();
+    }));
+
+    for th in cons_threads {
+        let _ = th.join();
     }
-    wslice.commit();
 
     for i in 0..999 {
-        if contains.get(&i) != Some(&true) {
+        let contains = contains.lock().unwrap();
+        if contains.get(&(i + 1)) != Some(&true) {
             println!("Error : Didn't find {} in the hashmap", i);
         }
     }
