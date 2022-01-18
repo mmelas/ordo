@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::collections::HashMap;
 use crate::fifo;
 
+// NewType design in order to make
+// raw pointer Send + Sync
 struct SendPtr<T> (*mut T);
 impl<T> SendPtr<T> {
     pub fn get(self) -> *mut T {
@@ -18,7 +20,9 @@ unsafe impl<T> Sync for SendPtr<T> {}
 pub fn run_test() {
     let q = UnsafeCell::new(fifo::Queue{..Default::default()});
 
-    
+    /*
+     * Each thread requires a different pointer ref
+     */
     let ptr_wslice = q.get();
     let p = SendPtr(ptr_wslice);
     let p2 = SendPtr(ptr_wslice);
@@ -27,7 +31,7 @@ pub fn run_test() {
     let p5 = SendPtr(ptr_wslice);
 
     /*
-     * Producers
+     * Each tread requires a different counter ref
      */
     let counter = Arc::new(AtomicI64::new(0));
     let cnt_clone = counter.clone();
@@ -36,6 +40,9 @@ pub fn run_test() {
     let cnt_clone4 = counter.clone();
     let cnt_clone5 = counter.clone();
 
+    /*
+     * Producers
+     */
     let mut prod_threads = vec![];
     prod_threads.push(thread::spawn(move || {
         let wslice = unsafe{ (*p.get()).reserve(250) };
@@ -141,23 +148,32 @@ pub fn run_test() {
     for th in prod_threads {
         let _ = th.join();
     }
-    /*
-     * Consumer
-     */
 
+    /*
+     * Consumers
+     */
     let mut cons_threads = vec![];
     let contains = Arc::new(Mutex::new(HashMap::new()));
     let contains2 = contains.clone();
     let contains3 = contains.clone();
     let contains4 = contains.clone();
     let contains5 = contains.clone();
-    let ptr_slice = q.get();
-    let mut slice = unsafe{ (*ptr_slice).dequeue_multiple(200) };
-    let mut slice2 = unsafe{ (*ptr_slice).dequeue_multiple(200) };
-    let mut slice3 = unsafe{ (*ptr_slice).dequeue_multiple(200) };
-    let mut slice4 = unsafe{ (*ptr_slice).dequeue_multiple(399) };
+
+//    let ptr_slice = q.get();
+//    let mut slice = unsafe{ (*ptr_slice).dequeue_multiple(200) };
+//    let mut slice2 = unsafe{ (*ptr_slice).dequeue_multiple(200) };
+//    let mut slice3 = unsafe{ (*ptr_slice).dequeue_multiple(200) };
+//    let mut slice4 = unsafe{ (*ptr_slice).dequeue_multiple(399) };
+    let ptr_wslice = q.get();
+    let p = SendPtr(ptr_wslice);
+    let p2 = SendPtr(ptr_wslice);
+    let p3 = SendPtr(ptr_wslice);
+    let p4 = SendPtr(ptr_wslice);
+    let p5 = SendPtr(ptr_wslice);
 
     cons_threads.push(thread::spawn(move || {
+        let mut slice = unsafe{ (*p.get()).dequeue_multiple(200) };
+//        let wslice = unsafe{ (*p.get()).reserve(250) };
         let offset = slice.offset;
         println!("{}", offset);
         for i in 0..slice.len {
@@ -169,6 +185,7 @@ pub fn run_test() {
     }));
 
     cons_threads.push(thread::spawn(move || {
+        let mut slice2 = unsafe{ (*p2.get()).dequeue_multiple(200) };
         let offset = slice2.offset;
         println!("{}", offset);
         for i in 0..slice2.len {
@@ -180,6 +197,7 @@ pub fn run_test() {
     }));
 
     cons_threads.push(thread::spawn(move || {
+        let mut slice3 = unsafe{ (*p3.get()).dequeue_multiple(200) };
         let offset = slice3.offset;
         println!("{}", offset);
         for i in 0..slice3.len {
@@ -191,6 +209,7 @@ pub fn run_test() {
     }));
 
     cons_threads.push(thread::spawn(move || {
+        let mut slice4 = unsafe{ (*p4.get()).dequeue_multiple(399) };
         let offset = slice4.offset;
         println!("{}", offset);
         for i in 0..slice4.len {
