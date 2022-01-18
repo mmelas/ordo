@@ -7,7 +7,7 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 10_000;
+const NUM_ITEMS : usize = 100_000;
 const THREADS : i64 = 8;
 const THREAD_ITEMS : usize = NUM_ITEMS / THREADS as usize;
 
@@ -382,8 +382,8 @@ pub fn run_test() {
     }
     //DO NOT push to v1, v2 etc simultaneously, put correct indices instead.
     let consumers_time = t0.elapsed();
-    println!("Consumers time: {:.4?}", consumers_time);
-    println!("Total time: {:.4?}", producers_time + consumers_time);
+    println!("Consumers time: {:.2?}", consumers_time);
+    println!("Total time: {:.2?}", producers_time + consumers_time);
 
     let mut included_nums = HashSet::new();
     for vector in vecs.into_inner() {
