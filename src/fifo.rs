@@ -1,25 +1,23 @@
-use std::sync::{Arc};
-use parking_lot::{Mutex, MutexGuard};
-use std::time::Instant;
 use std::sync::atomic::{AtomicUsize, AtomicI64, Ordering};
 use std::cmp;
 use std::cell::UnsafeCell;
 
 // temporarily global variable
-static THREADS : i64 = 5;
-
+// NUM_ITEMS must be multiple of 8
+const NUM_ITEMS : usize = 10_000;
+const THREADS : i64 = 8;
 /*
  * Ring buffer
  */
 pub struct Queue {
-    pub buffer: [i64; 1000],
+    pub buffer: [i64; NUM_ITEMS + 1],
     pub head: AtomicUsize,
     pub tail: AtomicUsize, //pointer of readable elements
     pub shadow_head: AtomicUsize, //readers pointer
     pub shadow_tail: AtomicUsize, //writers pointer
     pub next_tx: AtomicI64,
     pub last_commited_tx: AtomicUsize,
-    pub pending_transactions: [i64; 1000],
+    pub pending_transactions: [i64; NUM_ITEMS + 1],
 }
 
 unsafe impl Send for Queue {}
@@ -33,7 +31,6 @@ unsafe impl Sync for Queue {}
 pub struct Slice<'a> {
     pub queue: &'a mut Queue, // Revise lifetime params
     pub offset: usize,
-    curr_i: usize,
     pub len: usize,
 }
 
@@ -55,9 +52,9 @@ impl<'a> Slice<'a> {
         self.queue.head.store((self.queue.head.load(Ordering::SeqCst) + self.len) % self.queue.buffer.len(), Ordering::SeqCst);
     }
 
-    fn size(&self) -> usize {
-        return self.len;
-    }
+//    fn size(&self) -> usize {
+//        return self.len;
+//    }
 }
 
 impl<'a> WritableSlice<'a> {
@@ -71,7 +68,7 @@ impl<'a> WritableSlice<'a> {
             len: length,
         }
     }
-    pub unsafe fn update(&mut self, i: usize, v: i64) {
+    pub unsafe fn update(&mut self, v: i64) {
         let ptr = self.queue.get();
         let ind = (self.offset + self.curr_i) % (*ptr).buffer.len();
         (*ptr).buffer[ind] = v;
@@ -88,14 +85,14 @@ impl<'a> WritableSlice<'a> {
 impl Default for Queue {
     fn default() -> Queue {
         Queue {
-            buffer: [0; 1000],
+            buffer: [0; NUM_ITEMS + 1],
             head: AtomicUsize::new(0),
             shadow_head: AtomicUsize::new(0),
             shadow_tail: AtomicUsize::new(0),
             tail: AtomicUsize::new(0),
             next_tx: AtomicI64::new(0),
             last_commited_tx: AtomicUsize::new(0),
-            pending_transactions: [0; 1000],
+            pending_transactions: [0; NUM_ITEMS + 1],
         }
     }
 }
@@ -184,7 +181,7 @@ impl Queue {
         } else {
             head - s_tail
         }; 
-        println!("head {}, tail {}, Size : {}", head, s_tail, ret - 1);
+//        println!("head {}, tail {}, Size : {}", head, s_tail, ret - 1);
         return ret as usize;
     }
 
@@ -201,7 +198,7 @@ impl Queue {
             }
             
         }
-        return Slice{queue: self, curr_i: 0, offset: cur, len: len};
+        return Slice{queue: self, offset: cur, len: len};
     }
 
 }
