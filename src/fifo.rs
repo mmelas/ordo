@@ -155,12 +155,12 @@ impl Queue {
         // always leave 1 space empty
         // between head and tail in order
         // to distinguish empty from full buffer
-        if self.free_space() - 1 >= count { 
+        if self.free_space() - 1 >= count {
             loop {
                 cur = self.shadow_tail.load(Ordering::SeqCst);
                 if self.shadow_tail.compare_exchange(cur, (cur + count) % self.buffer.len(), Ordering::SeqCst, Ordering::SeqCst).is_ok() {
                     break;
-                }        
+                }
             }
             loop {
                 let tx_id = self.next_tx.load(Ordering::SeqCst);
@@ -178,7 +178,8 @@ impl Queue {
     pub fn free_space(&self) -> usize {
         let head = self.head.load(Ordering::SeqCst);
         let s_tail = self.shadow_tail.load(Ordering::SeqCst);
-        let ret = if head <= s_tail {
+        // after first time head will never become same as tail again
+        let ret = if head <= s_tail { 
             self.buffer.len() - s_tail + head
         } else {
             head - s_tail

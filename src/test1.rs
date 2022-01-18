@@ -5,20 +5,26 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::collections::HashMap;
 use crate::fifo;
 
+struct SendPtr<T> (*mut T);
+impl<T> SendPtr<T> {
+    pub fn get(self) -> *mut T {
+        return self.0;
+    }
+
+}
+unsafe impl<T> Send for SendPtr<T> {}
+unsafe impl<T> Sync for SendPtr<T> {}
+
 pub fn run_test() {
     let q = UnsafeCell::new(fifo::Queue{..Default::default()});
 
     
     let ptr_wslice = q.get();
-    let wslice = unsafe{ (*ptr_wslice).reserve(250) };
-    let ptr_wslice2 = q.get();
-    let wslice2 = unsafe{ (*ptr_wslice2).reserve(200) };
-    let ptr_wslice3 = q.get();
-    let wslice3 = unsafe{ (*ptr_wslice3).reserve(200) };
-    let ptr_wslice4 = q.get();
-    let wslice4 = unsafe{ (*ptr_wslice4).reserve(200) };
-    let ptr_wslice5 = q.get();
-    let wslice5 = unsafe{ (*ptr_wslice5).reserve(149) };
+    let p = SendPtr(ptr_wslice);
+    let p2 = SendPtr(ptr_wslice);
+    let p3 = SendPtr(ptr_wslice);
+    let p4 = SendPtr(ptr_wslice);
+    let p5 = SendPtr(ptr_wslice);
 
     /*
      * Producers
@@ -32,6 +38,7 @@ pub fn run_test() {
 
     let mut prod_threads = vec![];
     prod_threads.push(thread::spawn(move || {
+        let wslice = unsafe{ (*p.get()).reserve(250) };
         match wslice {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -50,7 +57,8 @@ pub fn run_test() {
         }
     }));
 
-    prod_threads.push(thread::spawn(move || {
+    prod_threads.push(thread::spawn(move || { 
+        let wslice2 = unsafe{ (*p2.get()).reserve(200) };
         match wslice2 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -70,6 +78,7 @@ pub fn run_test() {
     }));
 
     prod_threads.push(thread::spawn(move || {
+        let wslice3 = unsafe{ (*p3.get()).reserve(200) };
         match wslice3 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -89,6 +98,7 @@ pub fn run_test() {
     }));
 
     prod_threads.push(thread::spawn(move || {
+        let wslice4 = unsafe{ (*p4.get()).reserve(200) };
         match wslice4 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -108,6 +118,7 @@ pub fn run_test() {
     }));
 
     prod_threads.push(thread::spawn(move || {
+        let wslice5 = unsafe{ (*p5.get()).reserve(149) };
         match wslice5 {
             Some(mut x) => {
                 for _ in 0..x.len {
@@ -197,7 +208,7 @@ pub fn run_test() {
     for i in 0..999 {
         let contains = contains.lock().unwrap();
         if contains.get(&(i + 1)) != Some(&true) {
-            println!("Error : Didn't find {} in the hashmap", i);
+            println!("Error : Didn't find {} in the hashmap", i + 1);
         }
     }
     println!("Nice");
