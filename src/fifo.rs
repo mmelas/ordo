@@ -4,8 +4,8 @@ use std::cell::UnsafeCell;
 
 // temporarily global variable
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 100_000;
-const THREADS : i64 = 8;
+const NUM_ITEMS : usize = 10_000;
+const THREADS : i64 = 4;
 /*
  * Ring buffer
  */
@@ -18,6 +18,12 @@ pub struct Queue {
     pub next_tx: AtomicI64,
     pub last_commited_tx: AtomicUsize,
     pub pending_transactions: [i64; NUM_ITEMS + 1],
+
+    /*
+     * Needed for non-slices impl (baseline test) only
+     */
+    pub w_ind: usize,
+    pub r_ind: usize,
 }
 
 unsafe impl Send for Queue {}
@@ -93,6 +99,8 @@ impl Default for Queue {
             next_tx: AtomicI64::new(0),
             last_commited_tx: AtomicUsize::new(0),
             pending_transactions: [0; NUM_ITEMS + 1],
+            w_ind: 0,
+            r_ind: 0,
         }
     }
 }

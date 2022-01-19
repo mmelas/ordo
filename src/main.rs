@@ -1,6 +1,6 @@
-mod test1;
+mod test_base;
 mod fifo;
 
 fn main() {
-    test1::run_test();
+    test_base::run_test();
 }
