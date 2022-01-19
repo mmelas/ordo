@@ -2,15 +2,16 @@ use std::sync::{Arc, Mutex};
 use std::cell::UnsafeCell;
 use std::thread;
 use std::sync::atomic::{AtomicI64, Ordering, AtomicUsize};
+use std::collections::HashSet;
 use std::sync::Condvar;
 use std::time::Instant;
 
 use crate::fifo;
 
-// NUM_ITEMS must make THREAD_ITEMS even num
+// NUM_ITEMS must be multiple of 8
 const NUM_ITEMS : usize = 10_000;
-const PRODUCERS : i64 = 1;
-const CONSUMERS : i64 = 1;
+const PRODUCERS : i64 = 4;
+const CONSUMERS : i64 = 4;
 const THREAD_ITEMS : usize = NUM_ITEMS / PRODUCERS as usize;
 
 pub struct Semaphore {
@@ -92,17 +93,21 @@ pub fn run_test() {
     let mut cons_threads = vec![];
 
     let rem_read = Arc::new(Mutex::new(NUM_ITEMS));
+    let nums_inserted = Arc::new(Mutex::new(vec![]));
     let t0 = Instant::now();
     for _ in 0..CONSUMERS {
         let q_ptr_c = q.clone();
         let rem_c = rem_read.clone();
         let sem_p = prod_sem.clone();
         let sem_c = cons_sem.clone();
+        let nums_inserted_c = nums_inserted.clone();
         cons_threads.push(thread::spawn(move || {
             for _ in 0..THREAD_ITEMS {
                 sem_c.dec();
                 let mut curr_q = q_ptr_c.lock().unwrap();
                 let calculation = curr_q.buffer[curr_q.r_ind] + 1;
+                let mut curr_vec = nums_inserted_c.lock().unwrap();
+                curr_vec.push(curr_q.buffer[curr_q.r_ind]);
                 let mut rem = rem_c.lock().unwrap();
                 *rem -= 1;
                 curr_q.r_ind += 1;
@@ -116,8 +121,20 @@ pub fn run_test() {
        }));
 
     }
-
-    while (true) {
-        //do nothing
+    for th in cons_threads {
+        th.join();
     }
+    let mut s = HashSet::new();
+    for elem in 0..nums_inserted.lock().unwrap().len() {
+        s.insert(elem);
+    }
+    for i in 0..NUM_ITEMS as i64 + 1 {
+        if !nums_inserted.lock().unwrap().contains(&i) {
+            println!("Error : Didn't find {} in the hashmap", i);
+        }
+    }
+
+//    while (true) {
+        //do nothing
+ //   }
 }
