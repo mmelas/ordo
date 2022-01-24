@@ -1,8 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Condvar};
 use std::cell::UnsafeCell;
 use std::thread;
 use std::sync::atomic::{AtomicI64, Ordering, AtomicUsize};
-use std::sync::Condvar;
 use std::time::Instant;
 
 use crate::fifo;

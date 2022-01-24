@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 
 // temporarily global variable
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 10_000;
+const NUM_ITEMS : usize = 100_000;
 const THREADS : i64 = 4;
 /*
  * Ring buffer
@@ -160,7 +160,7 @@ impl Queue {
         // always leave 1 space empty
         // between head and tail in order
         // to distinguish empty from full buffer
-        if self.free_space() - 1 >= count {
+        if self.free_space() >= count {
             loop {
                 cur = self.shadow_tail.load(Ordering::SeqCst);
                 if self.shadow_tail.compare_exchange(cur, (cur + count) % self.buffer.len(), Ordering::SeqCst, Ordering::SeqCst).is_ok() {
@@ -190,7 +190,8 @@ impl Queue {
             head - s_tail
         }; 
 //        println!("head {}, tail {}, Size : {}", head, s_tail, ret - 1);
-        return ret as usize;
+        // 1 slot is not used        
+        return ret - 1 as usize;
     }
 
 
@@ -201,7 +202,7 @@ impl Queue {
             cur = self.shadow_head.load(Ordering::SeqCst);
             let occupied_space = self.buffer.len() - self.free_space();
             len = cmp::min(occupied_space, count as usize);
-            if self.shadow_head.compare_exchange(cur, cur + len, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            if self.shadow_head.compare_exchange(cur, (cur + len) % NUM_ITEMS, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
                 break;
             }
             
