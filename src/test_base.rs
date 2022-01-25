@@ -7,9 +7,9 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must make THREAD_ITEMS even num
-const NUM_ITEMS : usize = 10_000;
-const PRODUCERS : i64 = 1;
-const CONSUMERS : i64 = 1;
+const NUM_ITEMS : usize = 40_000;
+const PRODUCERS : i64 = 2;
+const CONSUMERS : i64 = 2;
 const THREAD_ITEMS : usize = NUM_ITEMS / PRODUCERS as usize;
 
 pub struct Semaphore {
@@ -74,9 +74,9 @@ pub fn run_test() {
                     let mut curr_q = q_ptr_c.lock().unwrap();
                     let ind = curr_q.w_ind;
                     curr_q.buffer[ind] = cnt_c.fetch_add(1, Ordering::SeqCst);
+                    // wrap it around maybe
                     curr_q.w_ind += 1;
                     sem_c.inc();
-                    drop(curr_q);
                 }
             }));
         }
@@ -102,9 +102,10 @@ pub fn run_test() {
                 sem_c.dec();
                 let mut curr_q = q_ptr_c.lock().unwrap();
                 let calculation = curr_q.buffer[curr_q.r_ind] + 1;
+                curr_q.r_ind += 1;
+                drop(curr_q);
                 let mut rem = rem_c.lock().unwrap();
                 *rem -= 1;
-                curr_q.r_ind += 1;
                 if *rem == 0 {
                     let consumers_time = t0.elapsed();
                     println!("Consumers time: {:.2?}", consumers_time);

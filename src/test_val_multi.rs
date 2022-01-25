@@ -7,11 +7,11 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 10_000;
-const PRODUCERS : i64 = 4;
+const NUM_ITEMS : usize = 1_000;
+const PRODUCERS : i64 = 1;
 const CONSUMERS : i64 = 4;
 const WRITE_SLICE_S : usize = 100;
-const READ_SLICE_S : usize = 100;
+const READ_SLICE_S : usize = 500;
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -99,6 +99,9 @@ pub fn run_test() {
                             sem_p.dec();
                             for _ in 0..x.len {
                                 let curr = cnt_clone.fetch_add(1, Ordering::SeqCst);
+                                if curr <= 1000 {
+//                                    println!("curr {}", curr);
+                                }
                                 unsafe {
                                     x.update(curr);
                                 }
@@ -109,7 +112,7 @@ pub fn run_test() {
                             sem_c.inc();
                         },
                         None => {
-                            println!("error");
+//                            println!("error");
                         }
                     }
                 }
@@ -142,19 +145,24 @@ pub fn run_test() {
         let rem_c = rem_read.clone();
         let included_nums_c = included_nums.clone();
         cons_threads.push(thread::spawn(move || {
+            let mut cnt2 = 0;
             loop {
                 sem_c.dec();
-                let mut slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
+                let slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
                 let offset = slice.offset;
+                println!("HI");
+                println!("len : {}, offset : {}", slice.len, offset);
                 for i in 0..slice.len {
                     if included_nums_c.lock().unwrap().contains(&(slice.queue.buffer[i + offset] + 1)) {
-                        println!("Error, duplicate value {}", i+1);
+                        println!("Error, duplicate value {}", slice.queue.buffer[i + offset] + 1);
+                        cnt2 += 1;
                     };
                     included_nums_c.lock().unwrap().insert(slice.queue.buffer[i + offset] + 1); 
                 }
                 let mut rem = rem_c.lock().unwrap();
                 *rem -= slice.len as i64;
-                if *rem == 0 {
+                if *rem <= 0 {
+                    println!("cnt 2 {}", cnt2);
                     let consumers_time = t0.elapsed();
                     println!("Consumers time: {:.2?}", consumers_time);
                     println!("Producers time: {:.2?}", producers_time);
@@ -169,7 +177,6 @@ pub fn run_test() {
                     println!("{}, Number of missing values : {}", *rem, cnt_missing);
                     break;
                 }
-                slice.commit();
                 sem_p.inc();
             }
         }));
