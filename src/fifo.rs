@@ -5,7 +5,7 @@ use std::cell::UnsafeCell;
 // temporarily global variable
 // NUM_ITEMS must be multiple of 8
 const NUM_ITEMS : usize = 100_000;
-const THREADS : i64 = 1;
+const THREADS : i64 = 4;
 /*
  * Ring buffer
  */
@@ -15,7 +15,7 @@ pub struct Queue {
     pub tail: AtomicUsize, //pointer of readable elements
     pub shadow_tail: AtomicUsize, //writers pointer
     pub next_tx: AtomicI64,
-    pub last_commited_tx: AtomicUsize,
+    pub last_commited_tx: AtomicI64,
     pub pending_transactions: [i64; NUM_ITEMS + 1],
 
     /*
@@ -95,7 +95,7 @@ impl Default for Queue {
             shadow_tail: AtomicUsize::new(0),
             tail: AtomicUsize::new(0),
             next_tx: AtomicI64::new(0),
-            last_commited_tx: AtomicUsize::new(0),
+            last_commited_tx: AtomicI64::new(-1),
             pending_transactions: [0; NUM_ITEMS + 1],
             w_ind: 0,
             r_ind: 0,
@@ -110,7 +110,7 @@ impl Queue {
 
 //        loop {
             let last_tx = self.last_commited_tx.load(Ordering::SeqCst);
-            let cond = (last_tx + 1) % THREADS as usize != tx_id;
+            let cond = (last_tx + 1) % THREADS != tx_id as i64;
             // if we enter this condition, this tx is immediately after last commited tx
             if !cond {
                 let mut max_tx_id = tx_id;
@@ -124,11 +124,11 @@ impl Queue {
                     max_tx_id = (max_tx_id + 1) % THREADS as usize;
                 }
                 // the actual max_tx_id is the previous one
-//                max_tx_id = (max_tx_id - 1).rem_euclid(THREADS as usize);
+                max_tx_id = (max_tx_id as i64 - 1).rem_euclid(THREADS) as usize;
 
                 println!("Commited");
                 self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % NUM_ITEMS, Ordering::SeqCst);
-                self.last_commited_tx.store(max_tx_id, Ordering::SeqCst);
+                self.last_commited_tx.store(max_tx_id as i64, Ordering::SeqCst);
 
                 // commit the pending transactions and advance the write pointer
                 // TODO: do we need compare exchange and condition? last_commited_tx
@@ -157,7 +157,7 @@ impl Queue {
         // reservation count request
         let mut cur : usize;
 
-        let tx_id = 0;
+        let mut tx_id : i64;
         // always leave 1 space empty
         // between head and tail in order
         // to distinguish empty from full buffer
@@ -169,13 +169,13 @@ impl Queue {
                 }
             }
             loop {
-                let tx_id = self.next_tx.load(Ordering::SeqCst);
+                tx_id = self.next_tx.load(Ordering::SeqCst);
                 if self.next_tx.compare_exchange(tx_id, (tx_id + 1) % THREADS, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
                     break;
                 }        
             }
-            self.pending_transactions[tx_id] = -(count as i64);
-            return Some(WritableSlice::new(self, cur, 0, tx_id, count));
+            self.pending_transactions[tx_id as usize] = -(count as i64);
+            return Some(WritableSlice::new(self, cur, 0, tx_id as usize, count));
         } else {
             return None;
         } 

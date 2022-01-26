@@ -7,11 +7,11 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 1_000;
-const PRODUCERS : i64 = 1;
+const NUM_ITEMS : usize = 10_000;
+const PRODUCERS : i64 = 4;
 const CONSUMERS : i64 = 4;
 const WRITE_SLICE_S : usize = 100;
-const READ_SLICE_S : usize = 500;
+const READ_SLICE_S : usize = 100;
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -150,7 +150,6 @@ pub fn run_test() {
                 sem_c.dec();
                 let slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
                 let offset = slice.offset;
-                println!("HI");
                 println!("len : {}, offset : {}", slice.len, offset);
                 for i in 0..slice.len {
                     if included_nums_c.lock().unwrap().contains(&(slice.queue.buffer[i + offset] + 1)) {

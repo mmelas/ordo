@@ -7,9 +7,9 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must make THREAD_ITEMS even num
-const NUM_ITEMS : usize = 40_000;
-const PRODUCERS : i64 = 2;
-const CONSUMERS : i64 = 2;
+const NUM_ITEMS : usize = 10_000;
+const PRODUCERS : i64 = 1;
+const CONSUMERS : i64 = 1;
 const THREAD_ITEMS : usize = NUM_ITEMS / PRODUCERS as usize;
 
 pub struct Semaphore {
