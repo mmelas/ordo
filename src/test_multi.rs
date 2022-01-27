@@ -7,10 +7,10 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 1_000;
-const PRODUCERS : i64 = 1;
+const NUM_ITEMS : usize = 10_000;
+const PRODUCERS : i64 = 4;
 const CONSUMERS : i64 = 4;
-const WRITE_SLICE_S : usize = 100;
+const WRITE_SLICE_S : usize = 500;
 const READ_SLICE_S : usize = 500;
 
 // NewType design in order to make
@@ -128,14 +128,6 @@ pub fn run_test() {
 
     let ptr_wslice = q.get();
 
-    /*
-     * Eventually the Set will contain 3*slice_size more values
-     * because the producers do not stop appending values
-     * and we have 4 threads reading simultaneously (so 3 threads more after 
-     * the *rem = 0 one
-     */
-    let included_nums = Arc::new(Mutex::new(HashSet::new()));
-
     let rem_read = Arc::new(Mutex::new(NUM_ITEMS as i64));
     let t0 = Instant::now();
     for _ in 0..CONSUMERS as usize {
@@ -143,38 +135,22 @@ pub fn run_test() {
         let sem_p = prod_sem.clone();
         let sem_c = cons_sem.clone();
         let rem_c = rem_read.clone();
-        let included_nums_c = included_nums.clone();
         cons_threads.push(thread::spawn(move || {
-            let mut cnt2 = 0;
             loop {
                 sem_c.dec();
                 let slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
                 let offset = slice.offset;
-                println!("HI");
-                println!("len : {}, offset : {}", slice.len, offset);
+                let mut computation = 0;
                 for i in 0..slice.len {
-                    if included_nums_c.lock().unwrap().contains(&(slice.queue.buffer[i + offset] + 1)) {
-                        println!("Error, duplicate value {}", slice.queue.buffer[i + offset] + 1);
-                        cnt2 += 1;
-                    };
-                    included_nums_c.lock().unwrap().insert(slice.queue.buffer[i + offset] + 1); 
+                    computation += slice.queue.buffer[i + offset] + 1;
                 }
                 let mut rem = rem_c.lock().unwrap();
                 *rem -= slice.len as i64;
                 if *rem <= 0 {
-                    println!("cnt 2 {}", cnt2);
                     let consumers_time = t0.elapsed();
                     println!("Consumers time: {:.2?}", consumers_time);
                     println!("Producers time: {:.2?}", producers_time);
                     println!("Total time: {:.2?}", producers_time + consumers_time);
-                    let mut cnt_missing = 0;
-                    for i in 0..NUM_ITEMS as i64 {
-                        if !included_nums_c.lock().unwrap().contains(&(i + 1)) {
-                            println!("{}, Error : Didn't find {} in the hashmap", *rem, i + 1);
-                            cnt_missing += 1;
-                        }
-                    }
-                    println!("{}, Number of missing values : {}", *rem, cnt_missing);
                     break;
                 }
                 sem_p.inc();
