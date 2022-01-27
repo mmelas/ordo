@@ -1,18 +1,15 @@
 use std::sync::{Arc, Mutex};
-use std::cell::UnsafeCell;
 use std::thread;
-use std::sync::atomic::{AtomicI64, Ordering, AtomicUsize};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::collections::HashSet;
 use std::sync::Condvar;
 use std::time::Instant;
 
 use crate::fifo;
 
-// NUM_ITEMS must be multiple of 8
 const NUM_ITEMS : usize = 10_000;
-const PRODUCERS : i64 = 4;
-const CONSUMERS : i64 = 4;
-const THREAD_ITEMS : usize = NUM_ITEMS / PRODUCERS as usize;
+const PRODUCERS : i64 = 2;
+const CONSUMERS : i64 = 2;
 
 pub struct Semaphore {
     mutex: Mutex<i64>,
@@ -71,7 +68,7 @@ pub fn run_test() {
             let sem_p = prod_sem.clone();
             let sem_c = cons_sem.clone();
             prod_threads.push(thread::spawn(move || {
-                for _ in 0..THREAD_ITEMS {
+                loop {
                     sem_p.dec();
                     let mut curr_q = q_ptr_c.lock().unwrap();
                     let ind = curr_q.w_ind;
@@ -92,8 +89,13 @@ pub fn run_test() {
      */
     let mut cons_threads = vec![];
 
-    let rem_read = Arc::new(Mutex::new(NUM_ITEMS));
-    let nums_inserted = Arc::new(Mutex::new(vec![]));
+    let rem_read = Arc::new(Mutex::new(NUM_ITEMS as i64));
+    /*
+     * The set will contain CONSUMERS-1 more values
+     * because only one consumer will enter the equality condition on line 20
+     * while the rest will fall negative
+     */
+    let nums_inserted = Arc::new(Mutex::new(HashSet::new()));
     let t0 = Instant::now();
     for _ in 0..CONSUMERS {
         let q_ptr_c = q.clone();
@@ -102,39 +104,34 @@ pub fn run_test() {
         let sem_c = cons_sem.clone();
         let nums_inserted_c = nums_inserted.clone();
         cons_threads.push(thread::spawn(move || {
-            for _ in 0..THREAD_ITEMS {
+            loop {
                 sem_c.dec();
                 let mut curr_q = q_ptr_c.lock().unwrap();
                 let calculation = curr_q.buffer[curr_q.r_ind] + 1;
-                let mut curr_vec = nums_inserted_c.lock().unwrap();
-                curr_vec.push(curr_q.buffer[curr_q.r_ind]);
+                let mut s = nums_inserted_c.lock().unwrap();
+                s.insert(curr_q.buffer[curr_q.r_ind]);
                 let mut rem = rem_c.lock().unwrap();
                 *rem -= 1;
                 curr_q.r_ind += 1;
-                if *rem == 0 {
+                if *rem <= 0 {
                     let consumers_time = t0.elapsed();
                     println!("Consumers time: {:.2?}", consumers_time);
                     println!("Total time: {:.2?}", producers_time + consumers_time);
+                    break;
                 }
                 sem_p.inc();
             }
        }));
+    }
 
-    }
     for th in cons_threads {
-        th.join();
+        _ = th.join();
     }
-    let mut s = HashSet::new();
-    for elem in 0..nums_inserted.lock().unwrap().len() {
-        s.insert(elem);
-    }
-    for i in 0..NUM_ITEMS as i64 + 1 {
+
+    for i in 0..NUM_ITEMS as i64 {
         if !nums_inserted.lock().unwrap().contains(&i) {
             println!("Error : Didn't find {} in the hashmap", i);
         }
     }
 
-//    while (true) {
-        //do nothing
- //   }
 }

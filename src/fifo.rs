@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 
 // temporarily global variable
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 100_000;
+const NUM_ITEMS : usize = 50_000;
 const THREADS : i64 = 4;
 /*
  * Ring buffer
@@ -118,7 +118,6 @@ impl Queue {
                 // What if the whole buffer contains committed transactions?
                 // infinite loop?
                 while self.pending_transactions[max_tx_id] > 0 {
-//                    println!("HI");
                     sum += self.pending_transactions[max_tx_id];
                     self.pending_transactions[max_tx_id] = 0;
                     max_tx_id = (max_tx_id + 1) % THREADS as usize;
@@ -126,7 +125,7 @@ impl Queue {
                 // the actual max_tx_id is the previous one
                 max_tx_id = (max_tx_id as i64 - 1).rem_euclid(THREADS) as usize;
 
-                println!("Commited");
+//                println!("Commited");
                 self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % NUM_ITEMS, Ordering::SeqCst);
                 self.last_commited_tx.store(max_tx_id as i64, Ordering::SeqCst);
 
@@ -190,7 +189,6 @@ impl Queue {
         } else {
             head - tail
         }; 
-//        println!("head {}, tail {}, Size : {}", head, tail, ret - 1);
         // 1 slot is not used        
         return ret - 1 as usize;
     }
