@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 
 // temporarily global variable
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 50_000;
+const NUM_ITEMS : usize = 80_000;
 const THREADS : i64 = 4;
 /*
  * Ring buffer

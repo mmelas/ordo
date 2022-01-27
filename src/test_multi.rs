@@ -7,11 +7,11 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 10_000;
-const PRODUCERS : i64 = 4;
-const CONSUMERS : i64 = 4;
-const WRITE_SLICE_S : usize = 500;
-const READ_SLICE_S : usize = 500;
+const NUM_ITEMS : usize = 50_000;
+const PRODUCERS : i64 = 3;
+const CONSUMERS : i64 = 3;
+const WRITE_SLICE_S : usize = 1000;
+const READ_SLICE_S : usize = 1000;
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -128,13 +128,13 @@ pub fn run_test() {
 
     let ptr_wslice = q.get();
 
-    let rem_read = Arc::new(Mutex::new(NUM_ITEMS as i64));
+    let read_cnt = Arc::new(Mutex::new(0));
     let t0 = Instant::now();
     for _ in 0..CONSUMERS as usize {
         let p = SendPtr(ptr_wslice);
         let sem_p = prod_sem.clone();
         let sem_c = cons_sem.clone();
-        let rem_c = rem_read.clone();
+        let rem_c = read_cnt.clone();
         cons_threads.push(thread::spawn(move || {
             loop {
                 sem_c.dec();
@@ -145,7 +145,7 @@ pub fn run_test() {
                     computation += slice.queue.buffer[i + offset] + 1;
                 }
                 let mut rem = rem_c.lock().unwrap();
-                *rem -= slice.len as i64;
+                *rem += slice.len as i64;
                 if *rem <= 0 {
                     let consumers_time = t0.elapsed();
                     println!("Consumers time: {:.2?}", consumers_time);
@@ -157,6 +157,17 @@ pub fn run_test() {
             }
         }));
     }
+
+    ctrlc::set_handler(move || {
+        let consumers_time = t0.elapsed();
+        println!("Consumers time: {:.2?}", consumers_time);
+        println!("Producers time: {:.2?}", producers_time);
+        println!("Total time: {:.2?}", producers_time + consumers_time);
+        println!("Items read: {:.2?}", read_cnt.lock().unwrap());
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
+
     while true {
         //do nothing
     }

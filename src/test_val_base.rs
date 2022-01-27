@@ -8,8 +8,8 @@ use std::time::Instant;
 use crate::fifo;
 
 const NUM_ITEMS : usize = 10_000;
-const PRODUCERS : i64 = 2;
-const CONSUMERS : i64 = 2;
+const PRODUCERS : i64 = 1;
+const CONSUMERS : i64 = 1;
 
 pub struct Semaphore {
     mutex: Mutex<i64>,
@@ -74,8 +74,8 @@ pub fn run_test() {
                     let ind = curr_q.w_ind;
                     curr_q.buffer[ind] = cnt_c.fetch_add(1, Ordering::SeqCst);
                     curr_q.w_ind += 1;
+                    curr_q.w_ind %= NUM_ITEMS;
                     sem_c.inc();
-                    drop(curr_q);
                 }
             }));
         }
@@ -89,7 +89,7 @@ pub fn run_test() {
      */
     let mut cons_threads = vec![];
 
-    let rem_read = Arc::new(Mutex::new(NUM_ITEMS as i64));
+    let rem_read = Arc::new(Mutex::new(0));
     /*
      * The set will contain CONSUMERS-1 more values
      * because only one consumer will enter the equality condition on line 20
@@ -107,31 +107,56 @@ pub fn run_test() {
             loop {
                 sem_c.dec();
                 let mut curr_q = q_ptr_c.lock().unwrap();
-                let calculation = curr_q.buffer[curr_q.r_ind] + 1;
                 let mut s = nums_inserted_c.lock().unwrap();
-                s.insert(curr_q.buffer[curr_q.r_ind]);
+                if s.contains(&(curr_q.buffer[curr_q.r_ind] + 1)) {
+                    println!("Error, duplicate value {}", curr_q.buffer[curr_q.r_ind] + 1);
+                };
+                s.insert(curr_q.buffer[curr_q.r_ind] + 1);
                 let mut rem = rem_c.lock().unwrap();
-                *rem -= 1;
+                *rem += 1;
                 curr_q.r_ind += 1;
-                if *rem <= 0 {
-                    let consumers_time = t0.elapsed();
-                    println!("Consumers time: {:.2?}", consumers_time);
-                    println!("Total time: {:.2?}", producers_time + consumers_time);
-                    break;
-                }
+                curr_q.r_ind %= NUM_ITEMS;
+                drop(curr_q);
+//                if *rem <= 0 {
+//                    let consumers_time = t0.elapsed();
+//                    println!("Consumers time: {:.2?}", consumers_time);
+//                    println!("Total time: {:.2?}", producers_time + consumers_time);
+//                    break;
+//                }
                 sem_p.inc();
             }
        }));
     }
 
-    for th in cons_threads {
-        _ = th.join();
-    }
+//    for th in cons_threads {
+//        _ = th.join();
+//    }
+//
+//    for i in 0..NUM_ITEMS as i64 + 4 {
+//        if !nums_inserted.lock().unwrap().contains(&i) {
+//            println!("Error : Didn't find {} in the hashmap", i);
+//        }
+//    }
 
-    for i in 0..NUM_ITEMS as i64 {
-        if !nums_inserted.lock().unwrap().contains(&i) {
-            println!("Error : Didn't find {} in the hashmap", i);
+    ctrlc::set_handler(move || {
+        let consumers_time = t0.elapsed();
+        let curr_reads = *rem_read.lock().unwrap();
+        let mut cnt = 0;
+        for i in 0..curr_reads as i64 {
+            if !nums_inserted.lock().unwrap().contains(&(i + 1)) {
+                println!("Error : Didn't find {} in the hashmap", i + 1);
+                cnt += 1;
+            }
         }
-    }
+        println!("Count of missing items {}", cnt);
+        println!("Consumers time: {:.2?}", consumers_time);
+        println!("Total time: {:.2?}", producers_time + consumers_time);
+        println!("Items read: {:.2?}", *rem_read.lock().unwrap());
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
 
+    while (true) {
+        //do nothing
+    }
 }
