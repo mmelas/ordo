@@ -3,14 +3,15 @@ use std::cell::UnsafeCell;
 use std::{thread};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::collections::HashSet;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use crate::fifo;
 
-const NUM_ITEMS : usize = 1_000;
+// NUM_ITEMS must be multiple of 8
+const NUM_ITEMS : usize = 10_000;
 const PRODUCERS : i64 = 4;
 const CONSUMERS : i64 = 4;
-const WRITE_SLICE_S : usize = 500;
-const READ_SLICE_S : usize = 500;
+const WRITE_SLICE_S : usize = 10;
+const READ_SLICE_S : usize = 10;
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -93,25 +94,31 @@ pub fn run_test() {
             prod_threads.push(thread::spawn(move || {
                 loop {
                     let wslice = unsafe{ (*p.get()).reserve(WRITE_SLICE_S) };
+                    let mut stop = false;
                     match wslice {
                         Some(mut x) => {
-                            sem_p.dec();
+ //                           sem_p.dec();
                             for _ in 0..x.len {
                                 let curr = cnt_clone.fetch_add(1, Ordering::SeqCst);
-//                                if curr <= 1000 {
-//                                    println!("curr {}", curr);
-//                                }
-                                unsafe {
-                                    x.update(curr);
+//                                println!("{}", curr);
+                                if curr > NUM_ITEMS as i64{
+                                    stop = true;
+                                    break;
                                 }
+                                unsafe {
+                                     x.update(curr);
+                                 }
+                            }
+                            if stop {
+                                break;
                             }
                             unsafe {
                                 x.commit();
                             }
-                            sem_c.inc();
+//                            sem_c.inc();
                         },
                         None => {
-                            println!("error");
+//                            println!("error");
                         }
                     }
                 }
@@ -134,54 +141,53 @@ pub fn run_test() {
      * the *rem = 0 one
      */
     let included_nums = Arc::new(Mutex::new(HashSet::new()));
-
-    let read_cnt = Arc::new(Mutex::new(0));
+    thread::sleep(Duration::from_millis(10));
+    let rem_read = Arc::new(Mutex::new(NUM_ITEMS as i64));
     let t0 = Instant::now();
     for _ in 0..CONSUMERS as usize {
         let p = SendPtr(ptr_wslice);
         let sem_p = prod_sem.clone();
         let sem_c = cons_sem.clone();
-        let rem_c = read_cnt.clone();
+        let rem_c = rem_read.clone();
         let included_nums_c = included_nums.clone();
         cons_threads.push(thread::spawn(move || {
+            let mut cnt2 = 0;
             loop {
-                sem_c.dec();
+//                sem_c.dec();
                 let slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
                 let offset = slice.offset;
-//                println!("len : {}, offset : {}", slice.len, offset);
+//                println!("len : {}, offset : {}, duplicate values {}", slice.len, offset, cnt2);
                 for i in 0..slice.len {
-                    if included_nums_c.lock().unwrap().contains(&(slice.queue.buffer[i + offset] + 1)) {
-                        println!("Error, duplicate value {}", slice.queue.buffer[i + offset] + 1);
+                    let ind = i + offset; // DO we need % here?
+                    if included_nums_c.lock().unwrap().contains(&(slice.queue.buffer[ind] + 1)) {
+                        println!("Error, duplicate value {}", slice.queue.buffer[ind] + 1);
+                        cnt2 += 1;
                     };
-                    included_nums_c.lock().unwrap().insert(slice.queue.buffer[i + offset] + 1); 
-//                    println!("{}",slice.queue.buffer[i + offset] + 1); 
+//                    println!("Value {}", slice.queue.buffer[ind] + 1);
+                    included_nums_c.lock().unwrap().insert(slice.queue.buffer[ind] + 1); 
                 }
                 let mut rem = rem_c.lock().unwrap();
-                *rem += slice.len as i64;
-                sem_p.inc();
+                *rem -= slice.len as i64;
+                if *rem <= 0 {
+                    println!("cnt 2 {}", cnt2);
+                    let consumers_time = t0.elapsed();
+                    println!("Consumers time: {:.2?}", consumers_time);
+                    println!("Producers time: {:.2?}", producers_time);
+                    println!("Total time: {:.2?}", producers_time + consumers_time);
+                    let mut cnt_missing = 0;
+                    for i in 0..NUM_ITEMS as i64 {
+                        if !included_nums_c.lock().unwrap().contains(&(i + 1)) {
+//                            println!("{}, Error : Didn't find {} in the hashmap", *rem, i + 1);
+                            cnt_missing += 1;
+                        }
+                    }
+                    println!("{}, Number of missing values : {}", *rem, cnt_missing);
+                    break;
+                }
+//                sem_p.inc();
             }
         }));
     }
-
-    ctrlc::set_handler(move || {
-        let consumers_time = t0.elapsed();
-        let read_items = *read_cnt.lock().unwrap();
-        println!("Consumers time: {:.2?}", consumers_time);
-        println!("Producers time: {:.2?}", producers_time);
-        println!("Total time: {:.2?}", producers_time + consumers_time);
-        let mut cnt_missing = 0;
-        for i in 0..read_items as i64 {
-            if !included_nums.lock().unwrap().contains(&(i + 1)) {
-                println!("Error : Didn't find {} in the hashmap", i + 1);
-                cnt_missing += 1;
-            }
-        }
-        println!("Items read: {:.2?}", read_cnt.lock().unwrap());
-        println!("Number of missing values : {}", cnt_missing);
-        std::process::exit(0);
-    })
-    .expect("Error setting Ctrl-C handler");
-
     while true {
         //do nothing
     }

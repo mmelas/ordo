@@ -4,8 +4,8 @@ use std::cell::UnsafeCell;
 
 // temporarily global variable
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 80_000;
-const THREADS : i64 = 4;
+const NUM_ITEMS : usize = 60_000;
+const THREADS : i64 = 100_000;
 /*
  * Ring buffer
  */
@@ -105,50 +105,54 @@ impl Default for Queue {
 
 impl Queue {
     fn commit_tx(&mut self, tx_id: usize) {
+//        self.tail.store((self.tail.load(Ordering::SeqCst) + 10) % self.buffer.len(), Ordering::SeqCst);
         // commit the tx (do not finalize with 0 yet)
         self.pending_transactions[tx_id] *= -1;
 
-//        loop {
+        loop {
             let last_tx = self.last_commited_tx.load(Ordering::SeqCst);
-            let cond = (last_tx + 1) % THREADS != tx_id as i64;
+            let mut cond = (last_tx + 1) % THREADS != tx_id as i64;
             // if we enter this condition, this tx is immediately after last commited tx
             if !cond {
+//                println!("tx_id  {}, tail {}", tx_id, self.tail.load(Ordering::SeqCst));
                 let mut max_tx_id = tx_id;
                 let mut sum = 0;
                 // What if the whole buffer contains committed transactions?
                 // infinite loop?
                 while self.pending_transactions[max_tx_id] > 0 {
                     sum += self.pending_transactions[max_tx_id];
-                    self.pending_transactions[max_tx_id] = 0;
                     max_tx_id = (max_tx_id + 1) % THREADS as usize;
                 }
                 // the actual max_tx_id is the previous one
                 max_tx_id = (max_tx_id as i64 - 1).rem_euclid(THREADS) as usize;
 
 //                println!("Commited");
-                self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % NUM_ITEMS, Ordering::SeqCst);
-                self.last_commited_tx.store(max_tx_id as i64, Ordering::SeqCst);
+//                self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % NUM_ITEMS, Ordering::SeqCst);
+//                self.last_commited_tx.store(max_tx_id as i64, Ordering::SeqCst);
 
                 // commit the pending transactions and advance the write pointer
                 // TODO: do we need compare exchange and condition? last_commited_tx
                 // cannot change from a different thread because only one thread can 
                 // enter this current condition. If that's the case, can't we 
                 // include this on the above while loop?
-//                cond = self.last_commited_tx.compare_exchange(last_tx, max_tx_id, Ordering::SeqCst, Ordering::SeqCst).is_ok();
-//                if cond {
-//                    self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % self.buffer.len(), Ordering::SeqCst);
-//                    let mut i = tx_id;
-//                    while i != max_tx_id {
-//                        self.pending_transactions[i] = 0;
-//                        i = (i + 1) % THREADS as usize;
-//                    }
-//                    self.pending_transactions[max_tx_id] = 0;
-//                }
- //           }
- //           break;
+                cond = self.last_commited_tx.compare_exchange(last_tx, max_tx_id as i64, Ordering::SeqCst, Ordering::SeqCst).is_ok();
+                if cond {
+                    self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % self.buffer.len(), Ordering::SeqCst);
+                    let mut i = tx_id;
+                    while i != max_tx_id {
+                        self.pending_transactions[i] = 0;
+                        i = (i + 1) % THREADS as usize;
+                    }
+                    self.pending_transactions[max_tx_id] = 0;
+                    break;
+                }
+            }
+//            if cond {
+//                break;
+//            }
         }
-
-//        self.tail.store((self.tail.load(Ordering::SeqCst) + count) % self.buffer.len(), Ordering::SeqCst);
+//
+////        self.tail.store((self.tail.load(Ordering::SeqCst) + count) % self.buffer.len(), Ordering::SeqCst);
     }
 
     pub fn reserve(&mut self, count: usize) -> Option<WritableSlice> {
@@ -173,6 +177,7 @@ impl Queue {
                     break;
                 }        
             }
+            assert!(self.pending_transactions[tx_id as usize] == 0);
             self.pending_transactions[tx_id as usize] = -(count as i64);
             return Some(WritableSlice::new(self, cur, 0, tx_id as usize, count));
         } else {
@@ -202,6 +207,10 @@ impl Queue {
             let free_space = self.free_space();
             let occupied_space = NUM_ITEMS - free_space;
             len = cmp::min(occupied_space, count as usize);
+//            if len == 10 {
+//                println!("Occupied space {}, free space {}, head {}, tail {}", occupied_space, free_space, 
+//                         self.head.load(Ordering::SeqCst), self.tail.load(Ordering::SeqCst));
+//            }
             if self.head.compare_exchange(cur, (cur + len) % NUM_ITEMS, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
                 break;
             }
