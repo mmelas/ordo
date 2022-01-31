@@ -7,11 +7,11 @@ use std::time::{Instant, Duration};
 use crate::fifo;
 
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 10_000;
-const PRODUCERS : i64 = 4;
-const CONSUMERS : i64 = 4;
-const WRITE_SLICE_S : usize = 10;
-const READ_SLICE_S : usize = 10;
+const NUM_ITEMS : usize = 50_000;
+const PRODUCERS : i64 = 3;
+const CONSUMERS : i64 = 3;
+const WRITE_SLICE_S : usize = 1000;
+const READ_SLICE_S : usize = 1000;
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -94,26 +94,21 @@ pub fn run_test() {
             prod_threads.push(thread::spawn(move || {
                 loop {
                     let wslice = unsafe{ (*p.get()).reserve(WRITE_SLICE_S) };
-                    let mut stop = false;
                     match wslice {
                         Some(mut x) => {
  //                           sem_p.dec();
                             for _ in 0..x.len {
                                 let curr = cnt_clone.fetch_add(1, Ordering::SeqCst);
 //                                println!("{}", curr);
-                                if curr > NUM_ITEMS as i64{
-                                    stop = true;
-                                    break;
-                                }
                                 unsafe {
                                      x.update(curr);
                                  }
                             }
-                            if stop {
-                                break;
-                            }
                             unsafe {
                                 x.commit();
+                            }
+                            if cnt_clone.load(Ordering::SeqCst) > NUM_ITEMS as i64 {
+                                break;
                             }
 //                            sem_c.inc();
                         },
@@ -141,7 +136,6 @@ pub fn run_test() {
      * the *rem = 0 one
      */
     let included_nums = Arc::new(Mutex::new(HashSet::new()));
-    thread::sleep(Duration::from_millis(10));
     let rem_read = Arc::new(Mutex::new(NUM_ITEMS as i64));
     let t0 = Instant::now();
     for _ in 0..CONSUMERS as usize {

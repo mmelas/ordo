@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 
 // temporarily global variable
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 60_000;
+const NUM_ITEMS : usize = 100_000;
 const THREADS : i64 = 100_000;
 /*
  * Ring buffer
@@ -110,10 +110,18 @@ impl Queue {
         self.pending_transactions[tx_id] *= -1;
 
         loop {
-            let last_tx = self.last_commited_tx.load(Ordering::SeqCst);
+            let mut last_tx = self.last_commited_tx.load(Ordering::SeqCst);
             let mut cond = (last_tx + 1) % THREADS != tx_id as i64;
             // if we enter this condition, this tx is immediately after last commited tx
+//            println!("tx_id  {}, expected tx_id {}, tail {}", tx_id, self.last_commited_tx.load(Ordering::SeqCst) + 1, self.tail.load(Ordering::SeqCst));
+            // Careful. We need to do the comparison in the if statement, otherwise we 
+            // have to recheck if last_commited_tx is equal to last_tx before
+            // breaking.
+//            if ((self.last_commited_tx.load(Ordering::SeqCst) + 1) % THREADS) == tx_id as i64 {
             if !cond {
+//                println!("tx_id {}", tx_id);
+//                last_tx = tx_id as i64;
+//            if !cond {
 //                println!("tx_id  {}, tail {}", tx_id, self.tail.load(Ordering::SeqCst));
                 let mut max_tx_id = tx_id;
                 let mut sum = 0;
@@ -121,6 +129,7 @@ impl Queue {
                 // infinite loop?
                 while self.pending_transactions[max_tx_id] > 0 {
                     sum += self.pending_transactions[max_tx_id];
+//                    self.pending_transactions[max_tx_id] = 0;
                     max_tx_id = (max_tx_id + 1) % THREADS as usize;
                 }
                 // the actual max_tx_id is the previous one
@@ -135,7 +144,7 @@ impl Queue {
                 // cannot change from a different thread because only one thread can 
                 // enter this current condition. If that's the case, can't we 
                 // include this on the above while loop?
-                cond = self.last_commited_tx.compare_exchange(last_tx, max_tx_id as i64, Ordering::SeqCst, Ordering::SeqCst).is_ok();
+                let cond = self.last_commited_tx.compare_exchange(last_tx, max_tx_id as i64, Ordering::SeqCst, Ordering::SeqCst).is_ok();
                 if cond {
                     self.tail.store((self.tail.load(Ordering::SeqCst) + sum as usize) % self.buffer.len(), Ordering::SeqCst);
                     let mut i = tx_id;
@@ -145,6 +154,9 @@ impl Queue {
                     }
                     self.pending_transactions[max_tx_id] = 0;
                     break;
+                }
+                else {
+                    println!("DEBUG last tx {}, last_commited_tx {}", last_tx, self.last_commited_tx.load(Ordering::SeqCst));
                 }
             }
 //            if cond {
