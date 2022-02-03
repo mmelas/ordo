@@ -6,10 +6,10 @@ use std::time::Instant;
 use crate::fifo;
 
 // NUM_ITEMS must be multiple of 8
-const NUM_ITEMS : usize = 10000;
+const NUM_ITEMS : usize = 10_000;
 const PRODUCERS : i64 = 4;
 const CONSUMERS : i64 = 4;
-const WRITE_SLICE_S : usize = 20;
+const WRITE_SLICE_S : usize = 10;
 const READ_SLICE_S : usize = 20;
 
 // NewType design in order to make
@@ -97,6 +97,7 @@ pub fn run_test() {
                 let slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
                 let offset = slice.offset;
 //                println!("len : {}, offset : {}, duplicate values {}", slice.len, offset, cnt2);
+//                println!("len : {}, offset : {}", slice.len, offset);
                 let mut calculation = 0;
                 for i in 0..slice.len {
                     calculation += slice.queue.buffer[i + offset] + 1; 
@@ -108,6 +109,7 @@ pub fn run_test() {
                     println!("Consumers time: {:.2?}", consumers_time);
                     println!("Producers time: {:.2?}", producers_time);
                     println!("Total time: {:.2?}", producers_time + consumers_time);
+//                    std::process::exit(0);
                     break;
                 }
             }
