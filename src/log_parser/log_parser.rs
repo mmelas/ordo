@@ -1,7 +1,7 @@
 use crate::{process, fifo};
-use crate::file_reader;
-use crate::apply_regex;
-use crate::output_results;
+use crate::log_parser::file_reader;
+use crate::log_parser::apply_regex;
+use crate::log_parser::output_results;
 
 // NewType design in order to make
 // raw pointer Send + Sync
