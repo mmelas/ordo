@@ -1,7 +1,9 @@
 use crate::{process, fifo};
+use std::sync::Mutex;
 use crate::log_parser::file_reader;
 use crate::log_parser::apply_regex;
 use crate::log_parser::output_results;
+use std::fs::File;
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -66,11 +68,13 @@ pub fn run() {
     let q = Box::leak(Box::new(fifo::Queue{..Default::default()}));
     let q2 = Box::leak(Box::new(fifo::Queue{..Default::default()}));
 
-    let mut p1 = file_reader::FileReader::new(q, q);
-    p1.add_file("test0.txt".to_owned());
-    p1.add_file("test1.txt".to_owned());
-    p1.add_file("test2.txt".to_owned());
-    p1.add_file("test3.txt".to_owned());
+    let f1 = "test0.txt".to_owned();
+    let f2 = "test1.txt".to_owned();
+    let f3 = "test2.txt".to_owned();
+    let f4 = "test3.txt".to_owned();
+    let fds = vec![f1, f2, f3, f4];
+    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
+//    let p1 = file_reader::FileReader::new_with_single(q, q, &"test0.txt".to_owned(), 2);
 
     let p2 = apply_regex::AppRegex::new(q, q2);
 
