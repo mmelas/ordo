@@ -58,14 +58,20 @@ pub fn run_test() {
             let time_c = producers_time.clone();
             prod_threads.push(thread::spawn(move || {
                 loop {
-                    let wslice = unsafe{ (*p.get()).reserve(WRITE_SLICE_S) };
+                    let wslice = unsafe{
+                        (*p.get()).reserve(WRITE_SLICE_S) 
+                    };
                     match wslice {
                         Some(mut x) => {
-                            let curr_cnt = cnt_slices.fetch_add(1, Ordering::SeqCst);
+                            let curr_cnt = cnt_slices.fetch_add(
+                                1, Ordering::SeqCst
+                            );
 //                            println!("slice {}", curr_cnt);
                             let mut curr = 0;
                             for _ in 0..x.len {
-                                curr = cnt_clone.fetch_add(1, Ordering::SeqCst);
+                                curr = cnt_clone.fetch_add(
+                                    1, Ordering::SeqCst
+                                );
                                 unsafe {
                                      x.update(curr);
                                  }
@@ -115,27 +121,41 @@ pub fn run_test() {
         cons_threads.push(thread::spawn(move || {
             let mut cnt2 = 0;
             loop {
-                let mut slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
+                let mut slice = unsafe{
+                    (*p.get()).dequeue_multiple(READ_SLICE_S as i64) 
+                };
                 let offset = slice.offset;
                 for i in 0..slice.len {
                     let ind = (i + offset) % params::QUEUE_SIZE; // DO we need % here?
-                    if included_nums_c.lock().unwrap().contains(&(slice.queue.buffer[ind] + 1)) {
+                    if included_nums_c.lock().unwrap().contains(
+                        &(slice.queue.buffer[ind] + 1)
+                    ) {
 //                        println!("Error, duplicate value {}", slice.queue.buffer[ind] + 1);
                         cnt2 += 1;
                     };
 //                    println!("Value {}", slice.queue.buffer[ind] + 1);
-                    included_nums_c.lock().unwrap().insert(slice.queue.buffer[ind] + 1); 
+                    included_nums_c.lock().unwrap().insert(
+                        slice.queue.buffer[ind] + 1
+                    ); 
                 }
                 slice.commit();
 //                println!("len : {}, offset : {}, duplicate values {}", slice.len, offset, cnt2);
                 let mut rem = rem_c.lock().unwrap();
                 *rem -= slice.len as i64;
                 if *rem <= 0 {
-                    println!("Count of duplicates: {}", cnt2);
+                    println!(
+                        "Count of duplicates: {}", cnt2
+                    );
                     let consumers_time = t0.elapsed();
-                    println!("Consumers time: {:.2?}", consumers_time);
-                    println!("Producers time: {:.2?}", *prod_time_c.lock().unwrap());
-                    println!("Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time);
+                    println!(
+                        "Consumers time: {:.2?}", consumers_time
+                    );
+                    println!(
+                        "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
+                    );
+                    println!(
+                        "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
+                    );
                     let mut cnt_missing = 0;
                     for i in 0..NUM_ITEMS as i64 {
                         if !included_nums_c.lock().unwrap().contains(&(i + 1)) {

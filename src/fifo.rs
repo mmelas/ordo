@@ -83,12 +83,19 @@ impl<'a, T:Default> Slice<'a, T> {
                 // the actual max_tx_id is the previous one
                 max_tx_id -= 1;
 
-                cond = self.queue.last_rslice_id.compare_exchange(last_s_id, max_tx_id as i64, Ordering::SeqCst, Ordering::SeqCst).is_ok();
+                cond = self.queue.last_rslice_id.compare_exchange(
+                    last_s_id, max_tx_id as i64, 
+                    Ordering::SeqCst, 
+                    Ordering::SeqCst
+                ).is_ok();
                 if cond {
                     // If the next expected slice was commited after the above while loop
                     // was finished, we need to re-enter the loop and commit it 
                     if self.queue.pending_slices[max_tx_id + 1] > 0 {
-                        cond = self.queue.last_rslice_id.compare_exchange(max_tx_id as i64, self.slice_id as i64 - 1, Ordering::SeqCst, Ordering::SeqCst).is_ok();
+                        cond = self.queue.last_rslice_id.compare_exchange(
+                            max_tx_id as i64, self.slice_id as i64 - 1, 
+                            Ordering::SeqCst, Ordering::SeqCst
+                        ).is_ok();
                         if cond {
                             continue;
                         }
@@ -96,7 +103,10 @@ impl<'a, T:Default> Slice<'a, T> {
                     let mut prev_head;
                     loop {
                         prev_head = self.queue.head.load(Ordering::SeqCst);
-                        if self.queue.head.compare_exchange(prev_head, (prev_head + sum as usize) % self.queue.buffer.len(), Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                        if self.queue.head.compare_exchange(
+                            prev_head, (prev_head + sum as usize) % self.queue.buffer.len(), 
+                            Ordering::SeqCst, Ordering::SeqCst
+                        ).is_ok() {
                             break;
                         }
                     }
@@ -185,12 +195,18 @@ impl<T:Default> Queue<T> {
 //                println!("vghka");
                 // the actual max_tx_id is the previous one
                 max_tx_id -= 1;
-                cond = self.last_commited_tx.compare_exchange(last_tx, max_tx_id as i64, Ordering::SeqCst, Ordering::SeqCst).is_ok();
+                cond = self.last_commited_tx.compare_exchange(
+                    last_tx, max_tx_id as i64, 
+                    Ordering::SeqCst, Ordering::SeqCst
+                ).is_ok();
                 if cond {
                     // If the next expected transaction was commited after the above while loop
                     // was finished, we need to re-enter the loop and commit it 
                     if self.pending_transactions[max_tx_id + 1] > 0 {
-                        cond = self.last_commited_tx.compare_exchange(max_tx_id as i64, tx_id as i64 - 1, Ordering::SeqCst, Ordering::SeqCst).is_ok();
+                        cond = self.last_commited_tx.compare_exchange(
+                            max_tx_id as i64, tx_id as i64 - 1, 
+                            Ordering::SeqCst, Ordering::SeqCst
+                        ).is_ok();
                         if cond {
                             continue;
                         }
@@ -199,7 +215,10 @@ impl<T:Default> Queue<T> {
                     let mut prev_tail;
                     loop {
                         prev_tail = self.tail.load(Ordering::SeqCst);
-                        if self.tail.compare_exchange(prev_tail, (prev_tail + sum as usize) % QUEUE_SIZE, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                        if self.tail.compare_exchange(
+                            prev_tail, (prev_tail + sum as usize) % QUEUE_SIZE, 
+                            Ordering::SeqCst, Ordering::SeqCst
+                        ).is_ok() {
                             break;
                         }
                     }
@@ -236,14 +255,20 @@ impl<T:Default> Queue<T> {
 //                    break;
 //                }        
 //            }
-            if self.shadow_tail.compare_exchange(cur, (cur + count) /*% QUEUE_SIZE*/, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            if self.shadow_tail.compare_exchange(
+                cur, (cur + count) /*% QUEUE_SIZE*/, 
+                Ordering::SeqCst, Ordering::SeqCst
+            ).is_ok() {
                 break;
             }
         }
-        // TODO: with current implementation, later transactions can get lower tx_ids than previous ones? maybe not. Otherwise do the implementation with next_expected_os like in Slices (fn dequeue_muliple)
+        // TODO: with current implementation, maybe later transactions can get lower tx_ids than previous ones? Otherwise do the implementation with next_expected_os like in Slices (fn dequeue_muliple)
         loop {
             tx_id = self.next_tx.load(Ordering::SeqCst);
-            if self.next_tx.compare_exchange(tx_id, tx_id + 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            if self.next_tx.compare_exchange(
+                tx_id, tx_id + 1, 
+                Ordering::SeqCst, Ordering::SeqCst
+            ).is_ok() {
                 break;
             }        
         }
@@ -303,7 +328,10 @@ impl<T:Default> Queue<T> {
             len = cmp::min(readable_amount, count as usize);
 //            if len == 10 {
 //            }
-            if self.shadow_head.compare_exchange(cur, (cur + len) % QUEUE_SIZE, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            if self.shadow_head.compare_exchange(
+                cur, (cur + len) % QUEUE_SIZE, 
+                Ordering::SeqCst, Ordering::SeqCst
+            ).is_ok() {
 //                println!("Occupied space {}, free space {}, head {}, s_head {}, s_tail {}, readable amount {}, tail {}", occupied_space, free_space, 
 //                         self.head.load(Ordering::SeqCst), cur, self.shadow_tail.load(Ordering::SeqCst) % QUEUE_SIZE, readable_amount, self.tail.load(Ordering::SeqCst));
                 break;
@@ -315,7 +343,9 @@ impl<T:Default> Queue<T> {
             loop {
                 if cur == self.expected_slice_os.load(Ordering::SeqCst) as usize {
                     s_id = self.next_rslice_id.fetch_add(1, Ordering::SeqCst);
-                    self.expected_slice_os.store(((cur + len) % QUEUE_SIZE) as i64, Ordering::SeqCst);
+                    self.expected_slice_os.store(
+                        ((cur + len) % QUEUE_SIZE) as i64, Ordering::SeqCst
+                    );
                     break;
                 }
                 else {

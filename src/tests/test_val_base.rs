@@ -72,7 +72,9 @@ pub fn run_test() {
                     sem_p.dec();
                     let mut curr_q = q_ptr_c.lock().unwrap();
                     let ind = curr_q.w_ind;
-                    curr_q.buffer[ind] = cnt_c.fetch_add(1, Ordering::SeqCst);
+                    curr_q.buffer[ind] = cnt_c.fetch_add(
+                        1, Ordering::SeqCst
+                    );
                     curr_q.w_ind += 1;
                     curr_q.w_ind %= NUM_ITEMS;
                     sem_c.inc();
@@ -109,7 +111,10 @@ pub fn run_test() {
                 let mut curr_q = q_ptr_c.lock().unwrap();
                 let mut s = nums_inserted_c.lock().unwrap();
                 if s.contains(&(curr_q.buffer[curr_q.r_ind] + 1)) {
-                    println!("Error, duplicate value {}", curr_q.buffer[curr_q.r_ind] + 1);
+                    println!(
+                        "Error, duplicate value {}", 
+                        curr_q.buffer[curr_q.r_ind] + 1
+                    );
                 };
                 s.insert(curr_q.buffer[curr_q.r_ind] + 1);
                 let mut rem = rem_c.lock().unwrap();

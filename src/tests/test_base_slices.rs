@@ -170,7 +170,9 @@ pub fn run_test() {
         let prod_time_c = producers_time.clone();
         cons_threads.push(thread::spawn(move || {
             loop {
-                let mut slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
+                let mut slice = unsafe{ 
+                    (*p.get()).dequeue_multiple(READ_SLICE_S as i64) 
+                };
                 if slice.len == 0 {
                     continue;
                 }
@@ -190,9 +192,15 @@ pub fn run_test() {
 //                }
                 if *rem <= 0 {
                     let consumers_time = t0.elapsed();
-                    println!("Consumers time: {:.2?}", consumers_time);
-                    println!("Producers time: {:.2?}", *prod_time_c.lock().unwrap());
-                    println!("Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time);
+                    println!(
+                        "Consumers time: {:.2?}", consumers_time
+                    );
+                    println!(
+                        "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
+                    );
+                    println!(
+                        "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
+                    );
                     break;
                 }
 //                let cur_t = Instant::now();

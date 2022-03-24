@@ -17,7 +17,10 @@ unsafe impl Sync for ProcessRunner {}
 
 impl ProcessRunner {
     pub fn new() -> ProcessRunner {
-        return ProcessRunner{thread_pool : threadpool::ThreadPool::new(params::PRODUCERS as usize), processes : Vec::new()};
+        return ProcessRunner{
+            thread_pool : threadpool::ThreadPool::new(params::PRODUCERS as usize), 
+            processes : Vec::new()
+        };
     }
 
     pub fn start(&'static self) {

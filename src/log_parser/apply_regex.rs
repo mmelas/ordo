@@ -16,7 +16,10 @@ unsafe impl Send for AppRegex {}
 unsafe impl Sync for AppRegex {}
 
 impl AppRegex {
-    pub fn new(ins : *mut fifo::Queue<String>, outs : *mut fifo::Queue<String>) -> AppRegex {
+    pub fn new(
+        ins : *mut fifo::Queue<String>, 
+        outs : *mut fifo::Queue<String>
+    ) -> AppRegex {
         AppRegex {inputs : ins, outputs : outs}
     }
 }
@@ -32,7 +35,11 @@ impl process::Process for AppRegex {
 }
 
 
-pub fn op1(iq : *mut fifo::Queue<String>, oq : *mut fifo::Queue<String>, batch_size : i64) {
+pub fn op1(
+    iq : *mut fifo::Queue<String>, 
+    oq : *mut fifo::Queue<String>, 
+    batch_size : i64
+) {
     let mut rslice = unsafe{(*iq).dequeue_multiple(batch_size)};
     for i in 0..rslice.len {
         let ind = (i + rslice.offset) % params::QUEUE_SIZE;

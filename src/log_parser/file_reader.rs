@@ -13,7 +13,7 @@ use std::io::prelude::*;
 pub struct FileReader {
     pub inputs: *mut fifo::Queue<String>,
     pub outputs: *mut fifo::Queue<String>,
-    pub lines: Mutex<Vec<(io::Lines<io::BufReader<File>>, i64)>>, //TODO: change name
+    pub lines: Mutex<Vec<(io::Lines<io::BufReader<File>>, i64)>>,
 }
 
 unsafe impl Send for FileReader {}
@@ -24,7 +24,11 @@ impl FileReader {
 
     }
 
-    pub fn new_with_vector(ins : *mut fifo::Queue<String>, outs : *mut fifo::Queue<String>, lines : Vec<String>) -> FileReader {
+    pub fn new_with_vector(
+        ins : *mut fifo::Queue<String>, 
+        outs : *mut fifo::Queue<String>, 
+        lines : Vec<String>
+    ) -> FileReader {
         let mut buf_readers = Vec::new();
         for f in lines {
             let file = File::open(f).unwrap();
@@ -34,25 +38,34 @@ impl FileReader {
             let _ = file_c.rewind();
             buf_readers.push((buf_reader, line_cnt as i64));
         } 
-        FileReader {inputs: ins, outputs: outs, lines: Mutex::new(buf_readers)}
+        FileReader {
+            inputs: ins, outputs: outs, 
+            lines: Mutex::new(buf_readers)
+        }
     }
 
-    pub fn new_with_single(ins : *mut fifo::Queue<String>, outs : *mut fifo::Queue<String>, f_name : &String, partitions : i64) -> FileReader {
+    pub fn new_with_single(
+        ins : *mut fifo::Queue<String>, 
+        outs : *mut fifo::Queue<String>, 
+        f_name : String, partitions : i64
+    ) -> FileReader {
         let lines = Mutex::new(Vec::new());
 
-        let file = File::open(f_name).unwrap();
+        let file = File::open(&f_name).unwrap();
         let line_count = FileReader::count_file_lines(&file);
         let sep = (line_count / partitions as usize) as i64;
         let rem = (line_count % partitions as usize) as i64;
 
         for p in 0..partitions {
-            let file = File::open(f_name).unwrap();
+            let file = File::open(&f_name).unwrap();
             let mut batch_lines = io::BufReader::new(file).lines();
             for _ in 0..p * sep as i64 {
                 batch_lines.next();
             }
             // use rem if we are on last slice because it might include one more line
-            lines.lock().unwrap().push((batch_lines, sep + rem * (p == partitions - 1) as i64)); 
+            lines.lock().unwrap().push(
+                (batch_lines, sep + rem * (p == partitions - 1) as i64)
+            ); 
         }
         FileReader {inputs: ins, outputs: outs, lines: lines}
     }
@@ -73,29 +86,6 @@ impl process::Process for FileReader {
     fn activation(&self) -> i64 {
         return self.lines.lock().unwrap().len() as i64;
     }    
-
-//    fn activate(&self, batch_size : i64) {
-//        let mut line_count = 0;
-//        let f_name = self.lines.lock().unwrap().pop().unwrap();
-//        let f_name_c = f_name.clone();
-//        if let Ok(lines) = read_lines(f_name) {
-//            line_count = lines.count();
-//        }
-//
-//        let mut rem = line_count;
-//        if let Ok(mut lines) = read_lines(f_name_c) {
-//            // Consumes the iterator, returns an (Optional) String
-//            while rem > 0 {
-//                let write_cnt = cmp::min(rem, batch_size as usize);
-//                let mut ws = unsafe{(*self.outputs).reserve(write_cnt).unwrap()};
-//                rem -= write_cnt;
-//                for _ in 0..write_cnt {
-//                    let next_line = lines.next().unwrap().unwrap();
-//                    unsafe{ws.update(next_line)};
-//                }
-//                unsafe{ws.commit()};
-//            }
-//        }
 
 //    fn activate(&self, batch_size : i64) {
 //        let mut line_count = 0;
@@ -127,23 +117,25 @@ impl process::Process for FileReader {
 //        }
 //    }
 
+    // TODO:: maybe introduce a variable to 
+    // append more than one line on each Queue cell
     fn activate(&self, batch_size : i64) {
         let (mut lines, mut cnt) = self.lines.lock().unwrap().pop().unwrap();
+        let write_amount = cmp::min(batch_size, cnt as i64);
+        let mut ws = unsafe{
+            (*self.outputs).reserve(write_amount as usize).unwrap()
+        };
 
-        let mut ws = unsafe{(*self.outputs).reserve(batch_size as usize).unwrap()};
-
-        for _ in 0..cmp::min(batch_size, cnt as i64) {
+        for _ in 0..write_amount {
             let next_line = lines.next().unwrap().unwrap();
             unsafe{ws.update(next_line)};
         }
-
         unsafe{ws.commit()};
 
         cnt -= batch_size;
         if cnt > 0 {
             self.lines.lock().unwrap().push((lines, cnt));
         }
-
     }
 }
 

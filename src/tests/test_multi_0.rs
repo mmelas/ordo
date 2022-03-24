@@ -75,7 +75,9 @@ pub fn run_test() {
      */
     let counter = Arc::new(AtomicI64::new(0));
 
-    let prod_sem = Arc::new(Semaphore::new(NUM_ITEMS as i64/ WRITE_SLICE_S as i64));
+    let prod_sem = Arc::new(
+        Semaphore::new(NUM_ITEMS as i64/ WRITE_SLICE_S as i64)
+    );
     let cons_sem = Arc::new(Semaphore::new(0));
 
 
@@ -97,7 +99,9 @@ pub fn run_test() {
                         Some(mut x) => {
                             sem_p.dec();
                             for _ in 0..x.len {
-                                let curr = cnt_clone.fetch_add(1, Ordering::SeqCst);
+                                let curr = cnt_clone.fetch_add(
+                                    1, Ordering::SeqCst
+                                );
                                 unsafe {
                                     x.update(curr);
                                 }
@@ -134,7 +138,9 @@ pub fn run_test() {
         cons_threads.push(thread::spawn(move || {
             loop {
                 sem_c.dec();
-                let mut slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
+                let mut slice = unsafe{
+                    (*p.get()).dequeue_multiple(READ_SLICE_S as i64) 
+                };
                 let offset = slice.offset;
                 let mut cnt = 0;
                 println!("{}", offset);
@@ -145,9 +151,15 @@ pub fn run_test() {
                 *rem -= slice.len as i64;
                 if *rem <= 0 {
                     let consumers_time = t0.elapsed();
-                    println!("Consumers time: {:.2?}", consumers_time);
-                    println!("Producers time: {:.2?}", producers_time);
-                    println!("Total time: {:.2?}", producers_time + consumers_time);
+                    println!(
+                        "Consumers time: {:.2?}", consumers_time
+                    );
+                    println!(
+                        "Producers time: {:.2?}", producers_time
+                    );
+                    println!(
+                        "Total time: {:.2?}", producers_time + consumers_time
+                    );
                     break;
                 }
                 slice.commit();

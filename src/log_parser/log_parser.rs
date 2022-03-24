@@ -73,8 +73,8 @@ pub fn run() {
     let f3 = "test2.txt".to_owned();
     let f4 = "test3.txt".to_owned();
     let fds = vec![f1, f2, f3, f4];
-    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
-//    let p1 = file_reader::FileReader::new_with_single(q, q, &"test0.txt".to_owned(), 2);
+//    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
+    let p1 = file_reader::FileReader::new_with_single(q, q, "test0.txt".to_owned(), 2);
 
     let p2 = apply_regex::AppRegex::new(q, q2);
 

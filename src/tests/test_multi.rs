@@ -112,7 +112,9 @@ pub fn run_test() {
         let mut rem = 0;
         cons_threads.push(thread::spawn(move || {
             loop {
-                let mut slice = unsafe{ (*p.get()).dequeue_multiple(READ_SLICE_S as i64) };
+                let mut slice = unsafe{ 
+                    (*p.get()).dequeue_multiple(READ_SLICE_S as i64) 
+                };
                 let offset = slice.offset;
                 let mut calculation = 0;
                 for i in 0..slice.len {
@@ -130,9 +132,15 @@ pub fn run_test() {
                 *rem -= slice.len as i64;
                 if *rem <= 0 {
                     let consumers_time = t0.elapsed();
-                    println!("Consumers time: {:.2?}", consumers_time);
-                    println!("Producers time: {:.2?}", *prod_time_c.lock().unwrap());
-                    println!("Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time);
+                    println!(
+                        "Consumers time: {:.2?}", consumers_time
+                    );
+                    println!(
+                        "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
+                    );
+                    println!(
+                        "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
+                    );
                     break;
                 }
             }

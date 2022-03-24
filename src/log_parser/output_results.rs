@@ -14,7 +14,10 @@ unsafe impl Send for Output {}
 unsafe impl Sync for Output {}
 
 impl Output {
-    pub fn new(ins : *mut fifo::Queue<String>, outs : *mut fifo::Queue<String>) -> Output {
+    pub fn new(
+        ins : *mut fifo::Queue<String>, 
+        outs : *mut fifo::Queue<String>
+    ) -> Output {
         Output {inputs: ins, outputs: outs}
     }
 }
