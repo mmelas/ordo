@@ -7,11 +7,11 @@ mod log_parser;
 fn main() {
 //    tests::test_base::run_test();
 //    tests::test_val_base::run_test();
-//    tests::test_multi::run_test();
+    tests::test_multi::run_test();
 //    tests::test_val_multi::run_test();
 //    tests::test_val_base_slices::run_test();
 //    tests::test_base_slices::run_test();
 //    tests::test_process::run_test();
 //    tests::test_procrunner::run_test();
-    log_parser::log_parser::run();
+//    log_parser::log_parser::run();
 }
