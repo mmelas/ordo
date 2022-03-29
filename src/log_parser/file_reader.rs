@@ -27,10 +27,10 @@ impl FileReader {
     pub fn new_with_vector(
         ins : *mut fifo::Queue<String>, 
         outs : *mut fifo::Queue<String>, 
-        lines : Vec<String>
+        files : Vec<String>
     ) -> FileReader {
         let mut buf_readers = Vec::new();
-        for f in lines {
+        for f in files {
             let file = File::open(f).unwrap();
             let mut file_c = file.try_clone().unwrap();
             let buf_reader = io::BufReader::new(file).lines();
@@ -53,6 +53,7 @@ impl FileReader {
 
         let file = File::open(&f_name).unwrap();
         let line_count = FileReader::count_file_lines(&file);
+        drop(file);
         let sep = (line_count / partitions as usize) as i64;
         let rem = (line_count % partitions as usize) as i64;
 
@@ -122,6 +123,7 @@ impl process::Process for FileReader {
     fn activate(&self, batch_size : i64) {
         let (mut lines, mut cnt) = self.lines.lock().unwrap().pop().unwrap();
         let write_amount = cmp::min(batch_size, cnt as i64);
+
         let mut ws = unsafe{
             (*self.outputs).reserve(write_amount as usize).unwrap()
         };

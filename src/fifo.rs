@@ -12,20 +12,19 @@ const NUM_ITEMS : usize = params::NUM_ITEMS;
  * Ring buffer
  */
 pub struct Queue<T:Default> {
-    pub buffer: Box<[T]>,
+    pub buffer: Vec<T>,
     pub shadow_head: AtomicUsize,
     pub head: AtomicUsize,
     pub shadow_tail: AtomicUsize, //writers pointer
     pub tail: AtomicUsize, //pointer of readable elements
     pub next_tx: AtomicI64,
     pub last_commited_tx: AtomicI64,
-    pub pending_transactions: [i64; QUEUE_SIZE],
-//    pub pending_transactions: [i64; (NUM_ITEMS/ WRITE_SLICE_S) + 10],
+    pub pending_transactions: Vec<i64>,
     pub expected_rslice_os: AtomicI64,
     pub expected_wslice_os: AtomicI64,
     pub next_rslice_id: AtomicI64,
     pub last_rslice_id: AtomicI64,
-    pub pending_slices: [i64; QUEUE_SIZE], //TODO: set correct size
+    pub pending_slices: Vec<i64>, //TODO: set correct size
     pub epoch: AtomicI64,
 
     /*
@@ -168,7 +167,7 @@ impl<'a, T:Default> WritableSlice<'a, T> {
 impl<T:Default + Clone> Default for Queue<T> {
     fn default() -> Queue<T> {
         Queue {
-            buffer: vec![T::default(); QUEUE_SIZE].into_boxed_slice(),
+            buffer: vec![T::default(); QUEUE_SIZE],
             shadow_head: AtomicUsize::new(0),
             head: AtomicUsize::new(0),
             shadow_tail: AtomicUsize::new(0),
@@ -177,11 +176,12 @@ impl<T:Default + Clone> Default for Queue<T> {
             last_commited_tx: AtomicI64::new(-1),
             expected_rslice_os: AtomicI64::new(0),
             expected_wslice_os: AtomicI64::new(0),
-            pending_transactions: [0; QUEUE_SIZE],
+            pending_transactions: vec![0; QUEUE_SIZE],
 //            pending_transactions: [0; (NUM_ITEMS/ WRITE_SLICE_S) + 10],
             next_rslice_id: AtomicI64::new(0),
             last_rslice_id: AtomicI64::new(-1),
-            pending_slices: [0; QUEUE_SIZE],
+            pending_slices: vec![0; QUEUE_SIZE],
+ //           pending_slices: [0; QUEUE_SIZE],
             w_ind: 0,
             r_ind: 0,
             sum: AtomicI64::new(0),
@@ -222,13 +222,13 @@ impl<T:Default> Queue<T> {
                     // ensure that we don't commit transactions/ proceed tail 
                     // before the previous transactions also got commited
                     assert!(self.pending_transactions[tx_id as usize] > 0);
-                    // If the next expected transaction was commited after the above while loop
-                    // was finished, we need to re-enter the loop and commit it 
                     loop {
                         if self.pending_transactions[(tx_id as i64 - 1).rem_euclid(QUEUE_SIZE as i64) as usize] == 0 {
                             break;
                         }
                     }
+                    // If the next expected transaction was commited after the above while loop
+                    // was finished, we need to re-enter the loop and commit it 
                     if self.pending_transactions[((max_tx_id + 1) % QUEUE_SIZE as i64) as usize] > 0 {
                         cond = self.last_commited_tx.compare_exchange(
                             max_tx_id as i64, (tx_id as i64 - 1).rem_euclid(QUEUE_SIZE as i64), 
