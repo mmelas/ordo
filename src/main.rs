@@ -1,8 +1,11 @@
 mod tests;
+mod metrics;
 mod params;
 mod fifo;
 mod process;
 mod log_parser;
+#[macro_use]
+extern crate lazy_static;
 
 fn main() {
 //    tests::test_base::run_test();

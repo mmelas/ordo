@@ -121,50 +121,55 @@ pub fn run_test() {
         cons_threads.push(thread::spawn(move || {
             let mut cnt2 = 0;
             loop {
-                let mut slice = unsafe{
+                let slice = unsafe{
                     (*p.get()).dequeue_multiple(READ_SLICE_S as i64) 
                 };
-                let offset = slice.offset;
-                for i in 0..slice.len {
-                    let ind = (i + offset) % params::QUEUE_SIZE; // DO we need % here?
-                    if included_nums_c.lock().unwrap().contains(
-                        &(slice.queue.buffer[ind] + 1)
-                    ) {
-//                        println!("Error, duplicate value {}", slice.queue.buffer[ind] + 1);
-                        cnt2 += 1;
-                    };
-//                    println!("Value {}", slice.queue.buffer[ind] + 1);
-                    included_nums_c.lock().unwrap().insert(
-                        slice.queue.buffer[ind] + 1
-                    ); 
-                }
-                slice.commit();
-//                println!("len : {}, offset : {}, duplicate values {}", slice.len, offset, cnt2);
-                let mut rem = rem_c.lock().unwrap();
-                *rem -= slice.len as i64;
-                if *rem <= 0 {
-                    println!(
-                        "Count of duplicates: {}", cnt2
-                    );
-                    let consumers_time = t0.elapsed();
-                    println!(
-                        "Consumers time: {:.2?}", consumers_time
-                    );
-                    println!(
-                        "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
-                    );
-                    println!(
-                        "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
-                    );
-                    let mut cnt_missing = 0;
-                    for i in 0..NUM_ITEMS as i64 {
-                        if !included_nums_c.lock().unwrap().contains(&(i + 1)) {
-//                            println!("{}, Error : Didn't find {} in the hashmap", *rem, i + 1);
-                            cnt_missing += 1;
+                match slice {
+                    Some(mut slice) => {
+                        let offset = slice.offset;
+                        for i in 0..slice.len {
+                            let ind = (i + offset) % params::QUEUE_SIZE; // DO we need % here?
+                            if included_nums_c.lock().unwrap().contains(
+                                &(slice.queue.buffer[ind] + 1)
+                            ) {
+        //                        println!("Error, duplicate value {}", slice.queue.buffer[ind] + 1);
+                                cnt2 += 1;
+                            };
+        //                    println!("Value {}", slice.queue.buffer[ind] + 1);
+                            included_nums_c.lock().unwrap().insert(
+                                slice.queue.buffer[ind] + 1
+                            ); 
                         }
-                    }
-                    println!("{}, Number of missing values : {}", *rem, cnt_missing);
-                    break;
+                        slice.commit();
+        //                println!("len : {}, offset : {}, duplicate values {}", slice.len, offset, cnt2);
+                        let mut rem = rem_c.lock().unwrap();
+                        *rem -= slice.len as i64;
+                        if *rem <= 0 {
+                            println!(
+                                "Count of duplicates: {}", cnt2
+                            );
+                            let consumers_time = t0.elapsed();
+                            println!(
+                                "Consumers time: {:.2?}", consumers_time
+                            );
+                            println!(
+                                "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
+                            );
+                            println!(
+                                "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
+                            );
+                            let mut cnt_missing = 0;
+                            for i in 0..NUM_ITEMS as i64 {
+                                if !included_nums_c.lock().unwrap().contains(&(i + 1)) {
+        //                            println!("{}, Error : Didn't find {} in the hashmap", *rem, i + 1);
+                                    cnt_missing += 1;
+                                }
+                            }
+                            println!("{}, Number of missing values : {}", *rem, cnt_missing);
+                            break;
+                        }
+                    }, 
+                    None => {}
                 }
             }
         }));

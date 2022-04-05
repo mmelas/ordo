@@ -230,6 +230,7 @@ dependencies = [
  "cortex-m",
  "crossbeam-utils",
  "ctrlc",
+ "lazy_static",
  "memmap",
  "parking_lot",
  "rand",

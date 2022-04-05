@@ -3,7 +3,11 @@ use std::sync::Mutex;
 use crate::log_parser::file_reader;
 use crate::log_parser::apply_regex;
 use crate::log_parser::output_results;
+use crate::log_parser::split_string;
+use crate::metrics;
+use std::sync::Arc;
 use std::fs::File;
+
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -67,23 +71,32 @@ pub fn run() {
     let pr = Box::leak(Box::new(process::ProcessRunner::new()));
     let q = Box::leak(Box::new(fifo::Queue{..Default::default()}));
     let q2 = Box::leak(Box::new(fifo::Queue{..Default::default()}));
+    let q3 = Box::leak(Box::new(fifo::Queue{..Default::default()}));
 
     let f1 = "test0.txt".to_owned();
     let f2 = "test1.txt".to_owned();
     let f3 = "test2.txt".to_owned();
     let f4 = "test3.txt".to_owned();
-    let fds = vec![f1, f2, f3, f4];
+    let f5 = "test4.txt".to_owned();
+    let f6 = "test5.txt".to_owned();
+    let fds = vec![f1, f2, f3, f4, f5, f6];
+
+    let metrics = Arc::new(Box::leak(Box::new(metrics::Metrics{..Default::default()})));
 //    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
-    let p1 = file_reader::FileReader::new_with_single(q, q, "test0.txt".to_owned(), 2);
+    let p1 = file_reader::FileReader::new_with_single(q, q, "combined_texts.txt".to_owned(), 50);
+    let metrics_c = metrics.clone();
 
-    let p2 = apply_regex::AppRegex::new(q, q2);
+    let p2 = split_string::SplitString::new(q, q2);
 
-    let p3 = output_results::Output::new(q2, q2);
+    let p3 = apply_regex::AppRegex::new(q2, q3, metrics);
+
+    let p4 = output_results::Output::new(q3, q3, metrics_c);
 
 
     pr.add_process(Box::new(p1));
     pr.add_process(Box::new(p2));
     pr.add_process(Box::new(p3));
+    pr.add_process(Box::new(p4));
     pr.start();
 
     loop {}

@@ -112,37 +112,37 @@ pub fn run_test() {
         let mut rem = 0;
         cons_threads.push(thread::spawn(move || {
             loop {
-                let mut slice = unsafe{ 
+                let slice = unsafe{ 
                     (*p.get()).dequeue_multiple(READ_SLICE_S as i64) 
                 };
-                let offset = slice.offset;
-                let mut calculation = 0;
-                for i in 0..slice.len {
-                    let ind = (i + offset) % params::QUEUE_SIZE;
-                    calculation += slice.queue.buffer[ind] + 1;
-                }
-//                let cur_t = Instant::now();
-//                if slice.len > 0 {
-//                    while cur_t.elapsed() < time::Duration::from_millis(10) {
-//                        // do nothing
-//                    }
-//                }
-                slice.commit();
-                let mut rem = rem_c.lock().unwrap();
-                *rem -= slice.len as i64;
-                if *rem <= 0 {
-                    let consumers_time = t0.elapsed();
-                    println!(
-                        "Consumers time: {:.2?}", consumers_time
-                    );
-                    println!(
-                        "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
-                    );
-                    println!(
-                        "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
-                    );
-                    break;
-                }
+                match slice {
+                    Some(mut slice) => {
+                        let offset = slice.offset;
+                        let mut calculation = 0;
+                        for i in 0..slice.len {
+                            let ind = (i + offset) % params::QUEUE_SIZE;
+                            calculation += slice.queue.buffer[ind] + 1;
+                        }
+                        slice.commit();
+                        let mut rem = rem_c.lock().unwrap();
+                        *rem -= slice.len as i64;
+
+                        if *rem <= 0 {
+                            let consumers_time = t0.elapsed();
+                            println!(
+                                "Consumers time: {:.2?}", consumers_time
+                            );
+                            println!(
+                                "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
+                            );
+                            println!(
+                                "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
+                            );
+                            break;
+                        }
+                            },
+                            None => {}
+                        }
             }
         }));
     }

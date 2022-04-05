@@ -170,45 +170,47 @@ pub fn run_test() {
         let prod_time_c = producers_time.clone();
         cons_threads.push(thread::spawn(move || {
             loop {
-                let mut slice = unsafe{ 
+                let slice = unsafe{ 
                     (*p.get()).dequeue_multiple(READ_SLICE_S as i64) 
                 };
-                if slice.len == 0 {
-                    continue;
+                match slice {
+                    Some(mut slice) => {
+                        sem_c.dec();
+                        let offset = slice.offset;
+                        let mut calculation = 0;
+                        for i in 0..slice.len {
+                            let ind = (i + offset) % params::QUEUE_SIZE; // DO we need % here?
+                            calculation += slice.queue.buffer[ind] + 1;
+                        }
+                        slice.commit();
+                        sem_p.inc();
+                        let mut rem = rem_c.lock().unwrap();
+                        *rem -= slice.len as i64;
+        //                if slice.len < 10 {//&& *rem <= 100 {
+        //                    println!("HI {}, rem {}", slice.len, *rem);
+        //                }
+                        if *rem <= 0 {
+                            let consumers_time = t0.elapsed();
+                            println!(
+                                "Consumers time: {:.2?}", consumers_time
+                            );
+                            println!(
+                                "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
+                            );
+                            println!(
+                                "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
+                            );
+                            break;
+                        }
+        //                let cur_t = Instant::now();
+        //                if slice.len > 0 {
+        //                    while cur_t.elapsed() < time::Duration::from_millis(5) {
+        //                        // do nothing
+        //                    }
+        //                } 
+                    },
+                    None => {continue},
                 }
-                sem_c.dec();
-                let offset = slice.offset;
-                let mut calculation = 0;
-                for i in 0..slice.len {
-                    let ind = (i + offset) % params::QUEUE_SIZE; // DO we need % here?
-                    calculation += slice.queue.buffer[ind] + 1;
-                }
-                slice.commit();
-                sem_p.inc();
-                let mut rem = rem_c.lock().unwrap();
-                *rem -= slice.len as i64;
-//                if slice.len < 10 {//&& *rem <= 100 {
-//                    println!("HI {}, rem {}", slice.len, *rem);
-//                }
-                if *rem <= 0 {
-                    let consumers_time = t0.elapsed();
-                    println!(
-                        "Consumers time: {:.2?}", consumers_time
-                    );
-                    println!(
-                        "Producers time: {:.2?}", *prod_time_c.lock().unwrap()
-                    );
-                    println!(
-                        "Total time: {:.2?}", *prod_time_c.lock().unwrap() + consumers_time
-                    );
-                    break;
-                }
-//                let cur_t = Instant::now();
-//                if slice.len > 0 {
-//                    while cur_t.elapsed() < time::Duration::from_millis(5) {
-//                        // do nothing
-//                    }
-//                } 
             }
         }));
     }

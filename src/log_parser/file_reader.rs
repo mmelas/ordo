@@ -13,7 +13,7 @@ use std::io::prelude::*;
 pub struct FileReader {
     pub inputs: *mut fifo::Queue<String>,
     pub outputs: *mut fifo::Queue<String>,
-    pub lines: Mutex<Vec<(io::Lines<io::BufReader<File>>, i64)>>,
+    pub lines: Mutex<Vec<(io::BufReader<File>, u64)>>,
 }
 
 unsafe impl Send for FileReader {}
@@ -32,11 +32,9 @@ impl FileReader {
         let mut buf_readers = Vec::new();
         for f in files {
             let file = File::open(f).unwrap();
-            let mut file_c = file.try_clone().unwrap();
-            let buf_reader = io::BufReader::new(file).lines();
-            let line_cnt = FileReader::count_file_lines(&file_c);
-            let _ = file_c.rewind();
-            buf_readers.push((buf_reader, line_cnt as i64));
+            let file_size = file.metadata().unwrap().len();
+            let buf_reader = io::BufReader::new(file);
+            buf_readers.push((buf_reader, file_size));
         } 
         FileReader {
             inputs: ins, outputs: outs, 
@@ -52,33 +50,42 @@ impl FileReader {
         let lines = Mutex::new(Vec::new());
 
         let file = File::open(&f_name).unwrap();
-        let line_count = FileReader::count_file_lines(&file);
+        let file_size = file.metadata().unwrap().len();
         drop(file);
-        let sep = (line_count / partitions as usize) as i64;
-        let rem = (line_count % partitions as usize) as i64;
+        let sep = (file_size / partitions as u64) as i64;
 
-        for p in 0..partitions {
+        let mut prev_idx = 0;
+        for p in 1..partitions + 1 {
+            let mut next_br;
+            let os = p*sep;
             let file = File::open(&f_name).unwrap();
-            let mut batch_lines = io::BufReader::new(file).lines();
-            for _ in 0..p * sep as i64 {
-                batch_lines.next();
-            }
-            // use rem if we are on last slice because it might include one more line
+            next_br = FileReader::get_next_br(file, os);
+            let upper_bound = next_br.seek(SeekFrom::Current(0)).unwrap();
+            let _ = next_br.seek(SeekFrom::Start(prev_idx));
             lines.lock().unwrap().push(
-                (batch_lines, sep + rem * (p == partitions - 1) as i64)
+                (next_br, upper_bound)
             ); 
+            prev_idx = upper_bound;
         }
         FileReader {inputs: ins, outputs: outs, lines: lines}
     }
 
-    fn count_file_bytes(f : &File) -> usize {
-        let bytes = io::BufReader::new(f).bytes(); 
-        bytes.count()
-    }
+    fn get_next_br(mut f : File, os : i64) -> io::BufReader<File> {
+        let _ = f.seek(SeekFrom::Start(os as u64));
+        let mut br = io::BufReader::new(f);
+        let mut bytes = br.by_ref().bytes();
 
-    fn count_file_lines(f : &File) -> usize {
-        let lines = io::BufReader::new(f).lines(); 
-        lines.count()
+        loop { 
+            match bytes.next() {
+                //10 is new line in ASCII
+                Some(byte) => if byte.unwrap() == 10 {
+                    break;
+                },
+                None => break,
+            }
+        }
+        bytes.next(); //skip new line byte
+        return br;
     }
 
 }
@@ -88,65 +95,79 @@ impl process::Process for FileReader {
         return self.lines.lock().unwrap().len() as i64;
     }    
 
-//    fn activate(&self, batch_size : i64) {
-//        let mut line_count = 0;
-//        let file = self.lines.lock().unwrap().pop().unwrap();
-//        let file_c = file.try_clone().unwrap();
-//        let mut file_c2 = file.try_clone().unwrap();
-//        let cur_pos = file_c2.seek(SeekFrom::Current(0)).unwrap();
-//        if let Ok(lines) = read_lines(file) {
-//            line_count = lines.count();
-//        }
-//        let _ = file_c2.seek(SeekFrom::Start(cur_pos));
-////        println!("lines {}", line_count);
-//
-//        let mut lines = io::BufReader::new(file_c); 
-//
-//        let write_cnt = cmp::min(line_count, batch_size as usize);
-//        let mut ws = unsafe{(*self.outputs).reserve(write_cnt).unwrap()};
-//        let mut bytes_read = 0;
-//        for _ in 0..write_cnt {
-//            let mut next_line = String::new();
-//            let next_line_bytes = lines.read_line(&mut next_line).unwrap();
-//            bytes_read += next_line_bytes;
-//            unsafe{ws.update(next_line)};
-//        }
-//        unsafe{ws.commit()};
-//        let _ = file_c2.seek(SeekFrom::Start(bytes_read as u64));
-//        if write_cnt != line_count {
-//            self.lines.lock().unwrap().push(file_c2);
-//        }
-//    }
-
-    // TODO:: maybe introduce a variable to 
-    // append more than one line on each Queue cell
-    fn activate(&self, batch_size : i64) {
-        let (mut lines, mut cnt) = self.lines.lock().unwrap().pop().unwrap();
-        let write_amount = cmp::min(batch_size, cnt as i64);
-
-        let mut ws = unsafe{
-            (*self.outputs).reserve(write_amount as usize).unwrap()
+    fn activate(&self, mut batch_size : i64) {
+        let lines = self.lines.lock().unwrap().pop();
+        let tuple = match lines {
+            Some(x) => x,
+            None => return
         };
+        let (mut buf_reader, upper_bound) = tuple;
+        let mut vec_lines = Vec::new();
 
-        for _ in 0..write_amount {
-            let next_line = lines.next().unwrap().unwrap();
-            unsafe{ws.update(next_line)};
+        // Read lines of current bufreader
+        let mut current_pos = buf_reader.seek(SeekFrom::Current(0)).unwrap();
+        let mut next_line;
+        while batch_size > 0 && current_pos < upper_bound {
+            batch_size -= 1;
+            next_line = "".to_owned();
+            current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
+            vec_lines.push(next_line);
+        } 
+        
+
+        let mut ws;
+        loop {
+            ws = unsafe {
+                (*self.outputs).reserve(vec_lines.len())
+            };
+            if ws.is_some() {
+                break;
+            }
         }
-        unsafe{ws.commit()};
+        let mut wslice = ws.unwrap();
+        for line in vec_lines {
+            unsafe{wslice.update(line)};
+        }
+        unsafe{wslice.commit()};
 
-        cnt -= batch_size;
-        if cnt > 0 {
-            self.lines.lock().unwrap().push((lines, cnt));
+        if buf_reader.seek(SeekFrom::Current(0)).unwrap() < upper_bound {
+            self.lines.lock().unwrap().push((buf_reader, upper_bound));
         }
     }
-}
 
-//fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-//where P: AsRef<Path>, {
-//    let file = File::open(filename)?;
-//    Ok(io::BufReader::new(file).lines())
-//}
-
-fn read_lines(file: File) -> io::Result<io::Lines<io::BufReader<File>>> {
-    Ok(io::BufReader::new(file).lines())
+//    fn activate(&self, mut batch_size : i64) {
+//        let lines = self.lines.lock().unwrap().pop();
+//        let tuple = match lines {
+//            Some(x) => x,
+//            None => return
+//        };
+//        let (mut buf_reader, upper_bound) = tuple;
+//
+//        let mut current_pos = buf_reader.seek(SeekFrom::Current(0)).unwrap();
+//        loop {
+//            let ws = unsafe {
+//                (*self.outputs).reserve(batch_size as usize)
+//            };
+//
+//            match ws {
+//                Some(mut x) => {
+//                    // Read lines of current bufreader
+//                    while batch_size > 0 && 
+//                          current_pos < upper_bound {
+//                        batch_size -= 1;
+//                        let mut next_line = "".to_owned();
+//                        current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
+//                        unsafe{x.update(next_line);}
+//                    } 
+//                    unsafe{x.commit()};
+//                    break;
+//                },
+//                None => {}
+//            }
+//        }
+//
+//        if current_pos < upper_bound {
+//            self.lines.lock().unwrap().push((buf_reader, upper_bound));
+//        }
+//    }
 }

@@ -292,11 +292,6 @@ impl<T:Default> Queue<T> {
             if self.free_space() < count {
                 return None; 
             }
-//            loop {
-//                tx_id = self.next_tx.load(Ordering::SeqCst);
-//                if self.next_tx.compare_exchange(tx_id, (tx_id + 1) % QUEUE_SIZE as i64, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-//                    break;
-//                }        
             if self.shadow_tail.compare_exchange(
                 cur, (cur + count) % QUEUE_SIZE, 
                 Ordering::SeqCst, Ordering::SeqCst
@@ -304,16 +299,6 @@ impl<T:Default> Queue<T> {
                 break;
             }
         }
-        // TODO: with current implementation, maybe later transactions can get lower tx_ids than previous ones? Otherwise do the implementation with next_expected_os like in Slices (fn dequeue_muliple)
-//        loop {
-//            tx_id = self.next_tx.load(Ordering::SeqCst);
-//            if self.next_tx.compare_exchange(
-//                tx_id, (tx_id + 1) % QUEUE_SIZE as i64, 
-//                Ordering::SeqCst, Ordering::SeqCst
-//            ).is_ok() {
-//                break;
-//            }        
-//        }
         loop {
             if cur == self.expected_wslice_os.load(Ordering::SeqCst) as usize {
                 loop {
@@ -385,7 +370,7 @@ impl<T:Default> Queue<T> {
         return ret as usize;
     }
 
-    pub fn dequeue_multiple(&mut self, count: i64) -> Slice<T> {
+    pub fn dequeue_multiple(&mut self, count: i64) -> Option<Slice<T>> {
         let mut cur : usize;
         let mut len : usize;
         loop {
@@ -395,8 +380,9 @@ impl<T:Default> Queue<T> {
 //            let free_space = self.free_space();
 //            let occupied_space = QUEUE_SIZE - free_space;
             len = cmp::min(readable_amount, count as usize);
-//            if len == 10 {
-//            }
+            if len == 0 {
+                return None;
+            }
             if self.shadow_head.compare_exchange(
                 cur, (cur + len) % QUEUE_SIZE, 
                 Ordering::SeqCst, Ordering::SeqCst
@@ -406,36 +392,33 @@ impl<T:Default> Queue<T> {
                 break;
             }
         }
-        let mut s_id = -1;
+//        println!("{}", len);
         // loop probably not needed, check
-        if len > 0 {
-            loop {
-                if cur == self.expected_rslice_os.load(Ordering::SeqCst) as usize {
-                    loop {
-                        s_id = self.next_rslice_id.load(Ordering::SeqCst);
-                        if self.next_rslice_id.compare_exchange(
-                            s_id, (s_id + 1) % QUEUE_SIZE as i64, 
-                            Ordering::SeqCst, Ordering::SeqCst
-                        ).is_ok() {
-                            break;
-                        }
+        let mut s_id;
+        loop {
+            if cur == self.expected_rslice_os.load(Ordering::SeqCst) as usize {
+                loop {
+                    s_id = self.next_rslice_id.load(Ordering::SeqCst);
+                    if self.next_rslice_id.compare_exchange(
+                        s_id, (s_id + 1) % QUEUE_SIZE as i64, 
+                        Ordering::SeqCst, Ordering::SeqCst
+                    ).is_ok() {
+                        break;
                     }
+                }
 //                    s_id = self.next_rslice_id.fetch_add(1, Ordering::SeqCst);
-                    self.expected_rslice_os.store(
-                        ((cur + len) % QUEUE_SIZE) as i64, Ordering::SeqCst
-                    );
-                    break;
-                }
-                else {
+                self.expected_rslice_os.store(
+                    ((cur + len) % QUEUE_SIZE) as i64, Ordering::SeqCst
+                );
+                break;
+            }
+            else {
 //                    println!("Debug");
-                }
             }
         }
 //        println!("offset {}, s_id {}", cur, s_id);
-        if s_id != -1 {
-            assert!(self.pending_slices[s_id as usize] == 0);
-            self.pending_slices[s_id as usize] = -(len as i64);
-        }
-        return Slice{queue: self, offset: cur, slice_id: s_id, len: len};
+        assert!(self.pending_slices[s_id as usize] == 0);
+        self.pending_slices[s_id as usize] = -(len as i64);
+        return Some(Slice{queue: self, offset: cur, slice_id: s_id, len: len});
     }
 }
