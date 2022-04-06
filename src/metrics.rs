@@ -19,7 +19,7 @@ impl Default for Metrics {
 
 impl Metrics {
     pub fn incr_hashtags(&self) {
-        if self.hashtags_read.fetch_add(1, Ordering::SeqCst) == 71 { //files contain 10 hashtags in total
+        if self.hashtags_read.fetch_add(1, Ordering::SeqCst) == 287 { //put as many hashtags as the files contain
             let total_time = self.start_time.elapsed();
             println!("Done reading all hashtags ({}).\n
                      Items read : {}, total time : {:?}",

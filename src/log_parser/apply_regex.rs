@@ -51,18 +51,13 @@ pub fn op1(
             for i in 0..slice.len {
                 metrics.incr_items();
                 let ind = (i + slice.offset) % params::QUEUE_SIZE;
-                // time how long extract_hashtags requires
-//                let tags = extract_hashtags(&slice.queue.buffer[ind]);
-//                let write_size = tags.len();
-                let mut write_size = 0;
+                let write_size;
                 match slice.queue.buffer[ind].chars().nth(0) {
                     Some(x) => {
                         write_size = (x == '#') as usize;
                     },
-                    None => {}
+                    None => {continue}
                 }
-//                println!("{}", write_size);
-//                let write_size = (slice.queue.buffer[ind].chars().nth(0).unwrap() == '#') as usize;
                 if write_size == 0 {
                     continue;
                 }
@@ -75,9 +70,6 @@ pub fn op1(
                 }
                 let mut wslice = ws.unwrap();
                 unsafe{wslice.update(slice.queue.buffer[ind].clone());}
-                //for tag in tags {
-                //    unsafe{x.update(tag.to_owned())};
-                //}
                 unsafe{wslice.commit()};
 
                 // We have to delete all instances from the queue
@@ -90,9 +82,17 @@ pub fn op1(
     }
 }
 
-fn extract_hashtags(text: &String) -> Vec<&str> {
-    let hashtag_regex : Regex = Regex::new(
-                r"\#[a-zA-Z][0-9a-zA-Z_]*"
-            ).unwrap();
-    hashtag_regex.find_iter(text).map(|mat| mat.as_str()).collect()
-}
+//fn check_hashtag(text: &String) -> usize {
+//    let hashtag_regex : Regex = Regex::new(
+//                r"\#[a-zA-Z][0-9a-zA-Z_]*"
+//    ).unwrap();
+//    hashtag_regex.is_match(text) as usize
+//
+//}
+
+//fn extract_hashtags(text: &String) -> Vec<&str> {
+//    let hashtag_regex : Regex = Regex::new(
+//                r"\#[a-zA-Z][0-9a-zA-Z_]*"
+//            ).unwrap();
+//    hashtag_regex.find_iter(text).map(|mat| mat.as_str()).collect()
+//}

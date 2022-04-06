@@ -33,7 +33,7 @@ impl process::Process for SplitString {
                     let splitted_line : Vec<&str> = slice.queue.buffer[ind].split_whitespace().collect();
                     let write_size = splitted_line.len();
                     // there's a chance of reading empty line
-                    // because the next operator resets it's read slice
+                    // because the next operator resets its read slice
                     // values to empty strings
                     if write_size == 0 {
                         continue;

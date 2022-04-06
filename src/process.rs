@@ -24,12 +24,13 @@ impl ProcessRunner {
     }
 
     pub fn start(&'static self) {
-        for _ in 0..params::PRODUCERS {
+        for j in 0..params::PRODUCERS {
             self.thread_pool.execute(move || {
                 let mut i = 0;
                 loop {
                     let p = &self.processes[i];
                     if p.activation() > 0 {
+                        //println!("thread {} process {}", j, i);
                         p.activate(WRITE_SLICE_S);
                     }
                     i += 1;
