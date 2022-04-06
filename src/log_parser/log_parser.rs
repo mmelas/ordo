@@ -85,12 +85,13 @@ pub fn run() {
 //    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
     let p1 = file_reader::FileReader::new_with_single(q, q, "combined_texts.txt".to_owned(), 50);
     let metrics_c = metrics.clone();
+    let metrics_c2 = metrics.clone();
 
-    let p2 = split_string::SplitString::new(q, q2);
+    let p2 = split_string::SplitString::new(q, q2, metrics);
 
-    let p3 = apply_regex::AppRegex::new(q2, q3, metrics);
+    let p3 = apply_regex::AppRegex::new(q2, q3, metrics_c);
 
-    let p4 = output_results::Output::new(q3, q3, metrics_c);
+    let p4 = output_results::Output::new(q3, q3, metrics_c2);
 
 
     pr.add_process(Box::new(p1));

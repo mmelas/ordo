@@ -48,34 +48,38 @@ pub fn op1(
     let rslice = unsafe{(*iq).dequeue_multiple(batch_size)};
     match rslice {
         Some(mut slice) => {
+            let mut hashtags = vec![];
+            metrics.incr_items(slice.len);
             for i in 0..slice.len {
-                metrics.incr_items();
                 let ind = (i + slice.offset) % params::QUEUE_SIZE;
-                let write_size;
                 match slice.queue.buffer[ind].chars().nth(0) {
                     Some(x) => {
-                        write_size = (x == '#') as usize;
+                        if x == '#' {
+                            hashtags.push(slice.queue.buffer[ind].clone());
+                        }
                     },
-                    None => {continue}
+                    None => {}
                 }
-                if write_size == 0 {
-                    continue;
-                }
-                let mut ws;
-                loop { 
-                    ws = unsafe{(*oq).reserve(write_size)};
-                    if ws.is_some() {
-                        break;
-                    }
-                }
-                let mut wslice = ws.unwrap();
-                unsafe{wslice.update(slice.queue.buffer[ind].clone());}
-                unsafe{wslice.commit()};
-
                 // We have to delete all instances from the queue
                 // Maybe think of another method of clearing the queue?
                 slice.queue.buffer[ind] = "".to_owned();
             }
+            let write_size = hashtags.len();
+            if write_size == 0 {
+                return;
+            }
+            let mut ws;
+            loop { 
+                ws = unsafe{(*oq).reserve(write_size)};
+                if ws.is_some() {
+                    break;
+                }
+            }
+            let mut wslice = ws.unwrap();
+            for h in hashtags {
+                unsafe{wslice.update(h);}
+            }
+            unsafe{wslice.commit()};
             slice.commit();
         }, 
         None => {}

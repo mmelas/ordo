@@ -29,8 +29,8 @@ impl Metrics {
                      )
         }    
     }
-    pub fn incr_items(&self) {
-        self.items_read.fetch_add(1, Ordering::SeqCst);
+    pub fn incr_items(&self, amount : usize) {
+        self.items_read.fetch_add(amount as i64, Ordering::SeqCst);
     }
     pub fn time_elapsed(&self) {
         let total_time = self.start_time.elapsed();

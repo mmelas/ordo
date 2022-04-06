@@ -35,6 +35,7 @@ impl process::Process for Output {
         let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
         match rslice {
             Some(mut slice) => {
+                self.metrics.incr_items(slice.len);
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
                     println!("tag : {}, ind : {}", slice.queue.buffer[ind], ind);

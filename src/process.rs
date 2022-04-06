@@ -1,4 +1,6 @@
 use crate::params;
+use rand::Rng;
+use rand::thread_rng;
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 
