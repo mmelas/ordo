@@ -5,6 +5,7 @@ use crate::log_parser::apply_regex;
 use crate::log_parser::output_results;
 use crate::log_parser::split_string;
 use crate::metrics;
+use crate::metric::Metric;
 use std::sync::Arc;
 use std::fs::File;
 
@@ -81,23 +82,34 @@ pub fn run() {
     let f6 = "test5.txt".to_owned();
     let fds = vec![f1, f2, f3, f4, f5, f6];
 
-    let metrics = Arc::new(Box::leak(Box::new(metrics::Metrics{..Default::default()})));
+    let metrics = Box::leak(Box::new(metrics::Metrics{..Default::default()}));
+
+    let m_0 = Box::leak(Box::new(Metric::new(0)));
+    let m_1 = Box::leak(Box::new(Metric::new(1)));
+    let m_2 = Box::leak(Box::new(Metric::new(2)));
+    let m_3 = Box::leak(Box::new(Metric::new(3)));
+    metrics.add_metric(m_0);
+    metrics.add_metric(m_1);
+    metrics.add_metric(m_2);
+    metrics.add_metric(m_3);
+
+ //   let metrics_arc = Arc::new(metrics);
 //    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
-    let p1 = file_reader::FileReader::new_with_single(q, q, "combined_texts.txt".to_owned(), 50);
-    let metrics_c = metrics.clone();
-    let metrics_c2 = metrics.clone();
+    let p1 = file_reader::FileReader::new_with_single(0, q, q, "combined_texts.txt".to_owned(), 50, m_0);
+//    let metrics_c = metrics_arc.clone();
+//    let metrics_c2 = metrics_arc.clone();
 
-    let p2 = split_string::SplitString::new(q, q2, metrics);
+    let p2 = split_string::SplitString::new(1, q, q2, m_1);
 
-    let p3 = apply_regex::AppRegex::new(q2, q3, metrics_c);
+    let p3 = apply_regex::AppRegex::new(2, q2, q3, m_2);
 
-    let p4 = output_results::Output::new(q3, q3, metrics_c2);
+    let p4 = output_results::Output::new(3, q3, q3, m_3);
 
 
-    pr.add_process(Box::new(p1));
-    pr.add_process(Box::new(p2));
-    pr.add_process(Box::new(p3));
-    pr.add_process(Box::new(p4));
+    pr.add_process(Box::leak(Box::new(p1)));
+    pr.add_process(Box::leak(Box::new(p2)));
+    pr.add_process(Box::leak(Box::new(p3)));
+    pr.add_process(Box::leak(Box::new(p4)));
     pr.start();
 
     loop {}

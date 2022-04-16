@@ -6,14 +6,19 @@ use std::path::Path;
 use std::fs::File;
 use std::{cmp, mem};
 use std::io::prelude::*;
+use crate::metric::Metric;
 
 // (operator) read a file and wrie to its output queue
 // each line as a String
 
+const WEIGHT : f64 = 1.0;
+
 pub struct FileReader {
+    id : usize,
     pub inputs: *mut fifo::Queue<String>,
     pub outputs: *mut fifo::Queue<String>,
     pub lines: Mutex<Vec<(io::BufReader<File>, u64)>>,
+    metric: *mut Metric
 }
 
 unsafe impl Send for FileReader {}
@@ -25,9 +30,11 @@ impl FileReader {
     }
 
     pub fn new_with_vector(
+        id : usize,
         ins : *mut fifo::Queue<String>, 
         outs : *mut fifo::Queue<String>, 
-        files : Vec<String>
+        files : Vec<String>,
+        metric : *mut Metric
     ) -> FileReader {
         let mut buf_readers = Vec::new();
         for f in files {
@@ -37,15 +44,18 @@ impl FileReader {
             buf_readers.push((buf_reader, file_size));
         } 
         FileReader {
-            inputs: ins, outputs: outs, 
-            lines: Mutex::new(buf_readers)
+            id : id, inputs: ins, outputs: outs, 
+            lines: Mutex::new(buf_readers),
+            metric: metric
         }
     }
 
     pub fn new_with_single(
+        id : usize,
         ins : *mut fifo::Queue<String>, 
         outs : *mut fifo::Queue<String>, 
-        f_name : String, partitions : i64
+        f_name : String, partitions : i64,
+        metric: *mut Metric
     ) -> FileReader {
         let lines = Mutex::new(Vec::new());
 
@@ -67,7 +77,7 @@ impl FileReader {
             ); 
             prev_idx = upper_bound;
         }
-        FileReader {inputs: ins, outputs: outs, lines: lines}
+        FileReader {id : id, inputs: ins, outputs: outs, lines: lines, metric: metric}
     }
 
     fn get_next_br(mut f : File, os : i64) -> io::BufReader<File> {
@@ -96,24 +106,26 @@ impl process::Process for FileReader {
     }    
 
     fn activate(&self, mut batch_size : i64) {
+        batch_size = (batch_size as f64 * WEIGHT) as i64;
         let lines = self.lines.lock().unwrap().pop();
-        let tuple = match lines {
+        let (mut buf_reader, upper_bound) = match lines {
             Some(x) => x,
             None => return
         };
-        let (mut buf_reader, upper_bound) = tuple;
         let mut vec_lines = Vec::new();
 
         // Read lines of current bufreader
         let mut current_pos = buf_reader.seek(SeekFrom::Current(0)).unwrap();
         let mut next_line;
+        let mut lines_read = 0;
         while batch_size > 0 && current_pos < upper_bound {
             batch_size -= 1;
+            lines_read += 1;
             next_line = "".to_owned();
             current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
             vec_lines.push(next_line);
         } 
-        
+        unsafe{(*self.metric).update(lines_read, vec_lines.len() as i64)}
 
         let mut ws;
         loop {

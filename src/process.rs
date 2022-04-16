@@ -11,7 +11,8 @@ pub trait Process : Send + Sync {
 
 pub struct ProcessRunner {
     pub thread_pool: threadpool::ThreadPool,
-    pub processes: Vec<Box<dyn Process>>,
+    //pub processes: Vec<Box<dyn Process>>,
+    pub processes: Vec<&'static mut dyn Process>,
 }
 
 unsafe impl Send for ProcessRunner {}
@@ -19,15 +20,15 @@ unsafe impl Sync for ProcessRunner {}
 
 impl ProcessRunner {
     pub fn new() -> ProcessRunner {
-        return ProcessRunner{
+        return ProcessRunner {
             thread_pool : threadpool::ThreadPool::new(params::PRODUCERS as usize), 
             processes : Vec::new()
         };
     }
 
     pub fn start(&'static self) {
-        for j in 0..params::PRODUCERS {
-            self.thread_pool.execute(move || {
+        for _ in 0..params::PRODUCERS {
+            self.thread_pool.execute(|| {
                 let mut i = 0;
                 loop {
                     let p = &self.processes[i];
@@ -40,9 +41,34 @@ impl ProcessRunner {
                 }
             });
         }
+//        self.thread_pool.execute(|| {
+//            loop {
+//                self.processes[2].activate(WRITE_SLICE_S);
+//            }
+//        });
+//        self.thread_pool.execute(|| {
+//            loop {
+//                self.processes[1].activate(WRITE_SLICE_S);
+//            }
+//        });
+//        self.thread_pool.execute(|| {
+//            loop {
+//                self.processes[1].activate(WRITE_SLICE_S);
+//            }
+//        });
+//        self.thread_pool.execute(|| {
+//            loop {
+//                self.processes[1].activate(WRITE_SLICE_S);
+//            }
+//        });
+//        self.thread_pool.execute(|| {
+//            loop {
+//                self.processes[1].activate(WRITE_SLICE_S);
+//            }
+//        })
     }
     
-    pub fn add_process(&mut self, proc : Box<dyn Process>) {
+    pub fn add_process(&mut self, proc : &'static mut dyn Process) {
         self.processes.push(proc);
     }
 }

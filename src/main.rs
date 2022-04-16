@@ -1,5 +1,6 @@
 mod tests;
 mod metrics;
+mod metric;
 mod params;
 mod fifo;
 mod process;

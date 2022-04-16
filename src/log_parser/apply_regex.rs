@@ -1,7 +1,7 @@
 use crate::process;
 use crate::fifo;
 use crate::params;
-use crate::metrics::Metrics;
+use crate::metric::Metric;
 use regex::Regex;
 use std::sync::Arc;
 
@@ -9,10 +9,13 @@ use std::sync::Arc;
 // of applying a regex to everything that comes into its
 // input Queue
 
+const WEIGHT : f64 = 20.0;
+
 pub struct AppRegex {
+    id : usize,
     pub inputs: *mut fifo::Queue<String>,
     pub outputs: *mut fifo::Queue<String>,
-    pub metrics: Arc<&'static mut Metrics>,
+    pub metric: *mut Metric
 }
 
 unsafe impl Send for AppRegex {}
@@ -20,11 +23,12 @@ unsafe impl Sync for AppRegex {}
 
 impl AppRegex {
     pub fn new(
+        id : usize,
         ins : *mut fifo::Queue<String>, 
         outs : *mut fifo::Queue<String>, 
-        metrics : Arc<&'static mut Metrics>,
+        metric : *mut Metric
     ) -> AppRegex {
-        AppRegex {inputs : ins, outputs : outs, metrics: metrics}
+        AppRegex {id : id, inputs : ins, outputs : outs, metric: metric}
     }
 }
 
@@ -34,22 +38,11 @@ impl process::Process for AppRegex {
     }    
 
     fn activate(&self, batch_size : i64) {
-        op1(self.inputs, self.outputs, batch_size, &self.metrics);
-    }
-}
-
-
-pub fn op1(
-    iq : *mut fifo::Queue<String>, 
-    oq : *mut fifo::Queue<String>, 
-    batch_size : i64,
-    metrics : &Metrics,
-) {
-    let rslice = unsafe{(*iq).dequeue_multiple(batch_size)};
+    let batch_size = (batch_size as f64 * WEIGHT) as i64;
+    let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
     match rslice {
         Some(mut slice) => {
             let mut hashtags = vec![];
-            metrics.incr_items(slice.len);
             for i in 0..slice.len {
                 let ind = (i + slice.offset) % params::QUEUE_SIZE;
                 match slice.queue.buffer[ind].chars().nth(0) {
@@ -65,12 +58,14 @@ pub fn op1(
                 slice.queue.buffer[ind] = "".to_owned();
             }
             let write_size = hashtags.len();
+            unsafe{(*self.metric).update(slice.len as i64, write_size as i64)};
             if write_size == 0 {
+                slice.commit();
                 return;
             }
             let mut ws;
             loop { 
-                ws = unsafe{(*oq).reserve(write_size)};
+                ws = unsafe{(*self.outputs).reserve(write_size)};
                 if ws.is_some() {
                     break;
                 }
@@ -84,6 +79,54 @@ pub fn op1(
         }, 
         None => {}
     }
+}
+
+
+//pub fn op1(
+//    iq : *mut fifo::Queue<String>, 
+//    oq : *mut fifo::Queue<String>, 
+//    batch_size : i64,
+//    metric : &mut Metric,
+//) {
+//    let rslice = unsafe{(*iq).dequeue_multiple(batch_size)};
+//    match rslice {
+//        Some(mut slice) => {
+//            let mut hashtags = vec![];
+//            metric.incr_items(slice.len as i64);
+//            for i in 0..slice.len {
+//                let ind = (i + slice.offset) % params::QUEUE_SIZE;
+//                match slice.queue.buffer[ind].chars().nth(0) {
+//                    Some(x) => {
+//                        if x == '#' {
+//                            hashtags.push(slice.queue.buffer[ind].clone());
+//                        }
+//                    },
+//                    None => {}
+//                }
+//                // We have to delete all instances from the queue
+//                // Maybe think of another method of clearing the queue?
+//                slice.queue.buffer[ind] = "".to_owned();
+//            }
+//            let write_size = hashtags.len();
+//            if write_size == 0 {
+//                return;
+//            }
+//            let mut ws;
+//            loop { 
+//                ws = unsafe{(*oq).reserve(write_size)};
+//                if ws.is_some() {
+//                    break;
+//                }
+//            }
+//            let mut wslice = ws.unwrap();
+//            for h in hashtags {
+//                unsafe{wslice.update(h);}
+//            }
+//            unsafe{wslice.commit()};
+//            slice.commit();
+//        }, 
+//        None => {}
+//    }
 }
 
 //fn check_hashtag(text: &String) -> usize {
