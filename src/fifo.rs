@@ -2,6 +2,9 @@ use std::sync::atomic::{AtomicUsize, AtomicI64, Ordering};
 use std::cmp;
 use std::cell::UnsafeCell;
 use crate::params;
+use std::sync::atomic::compiler_fence;
+use std::sync::atomic::fence;
+use std::time::Instant;
 
 const QUEUE_SIZE : usize = params::QUEUE_SIZE;
 const WRITE_SLICE_S : usize = params::WRITE_SLICE_S;
@@ -26,12 +29,8 @@ pub struct Queue<T:Default> {
     pub last_rslice_id: AtomicI64,
     pub pending_slices: Vec<i64>, //TODO: set correct size
     pub epoch: AtomicI64,
-
-    /*
-     * Needed for non-slices impl (baseline test) only
-     */
-    pub w_ind: usize,
     pub r_ind: usize,
+    pub w_ind: usize,
     pub sum: AtomicI64,
 }
 
@@ -52,9 +51,9 @@ pub struct Slice<'a, T:Default> {
 
 // UnsafeCell probably not needed. Check
 pub struct WritableSlice<'a, T:Default> {
-    queue: &'a mut Queue<T>,
-    offset: usize,
-    curr_i: usize,
+    pub queue: &'a mut Queue<T>,
+    pub offset: usize,
+    pub curr_i: usize,
     tx_id: usize,
     pub len: usize,
 }
@@ -68,7 +67,10 @@ impl<'a, T:Default> Slice<'a, T> {
         if self.slice_id == -1 {
             return;
         }
+//        unsafe{std::ptr::write_volatile(&mut self.queue.pending_slices[self.slice_id as usize], 
+ //                                       std::ptr::read_volatile(&self.queue.pending_slices[self.slice_id as usize]) * -1)};
         self.queue.pending_slices[self.slice_id as usize] *= -1;
+        fence(Ordering::SeqCst);
         loop {
             let last_s_id = self.queue.last_rslice_id.load(Ordering::SeqCst);
             let mut cond = (last_s_id + 1) % QUEUE_SIZE as i64 == self.slice_id;
@@ -76,14 +78,12 @@ impl<'a, T:Default> Slice<'a, T> {
             if cond {
                 let mut max_tx_id = self.slice_id as i64;
                 let mut sum = 0;
-                while self.queue.pending_slices[max_tx_id as usize] > 0 {
-                    sum += self.queue.pending_slices[max_tx_id as usize];
+                while unsafe{std::ptr::read_volatile(&self.queue.pending_slices[max_tx_id as usize])} > 0 {
+                    sum += unsafe{std::ptr::read_volatile(&self.queue.pending_slices[max_tx_id as usize])};
                     max_tx_id = (max_tx_id + 1) % QUEUE_SIZE as i64;
                 }
                 // the actual max_tx_id is the previous one
                 max_tx_id = (max_tx_id - 1).rem_euclid(QUEUE_SIZE as i64);
-//                println!("max s id {}", max_tx_id);
-//                max_tx_id -= 1;
 
                 cond = self.queue.last_rslice_id.compare_exchange(
                     last_s_id, max_tx_id as i64, 
@@ -94,7 +94,7 @@ impl<'a, T:Default> Slice<'a, T> {
                     // If the next expected slice was commited after the above while loop
                     // was finished, we need to re-enter the loop and commit it 
                     loop {
-                        if self.queue.pending_slices[(self.slice_id - 1).rem_euclid(QUEUE_SIZE as i64) as usize] == 0 {
+                        if unsafe{std::ptr::read_volatile(&self.queue.pending_slices[(self.slice_id - 1).rem_euclid(QUEUE_SIZE as i64) as usize])} == 0 {
                             break;
                         }
                     }
@@ -148,13 +148,13 @@ impl<'a, T:Default> WritableSlice<'a, T> {
             len: length,
         }
     }
+    // Maybe put an upper
+    // bound index on write slices and return
+    // error when trying to write to out of bounds index
     pub unsafe fn update(&mut self, v: T) {
-//        let ptr = self.queue.get();
-        let ind = (self.offset + self.curr_i) % self.queue.buffer.len();
-//        (*ptr).buffer[ind] = v;
+        let ind = (self.offset + self.curr_i) % QUEUE_SIZE;
         self.queue.buffer[ind] = v;
         self.curr_i += 1;
-        //println!("Value : {}", v);
     }
 
     pub unsafe fn commit(&mut self)  {
@@ -177,13 +177,11 @@ impl<T:Default + Clone> Default for Queue<T> {
             expected_rslice_os: AtomicI64::new(0),
             expected_wslice_os: AtomicI64::new(0),
             pending_transactions: vec![0; QUEUE_SIZE],
-//            pending_transactions: [0; (NUM_ITEMS/ WRITE_SLICE_S) + 10],
             next_rslice_id: AtomicI64::new(0),
             last_rslice_id: AtomicI64::new(-1),
             pending_slices: vec![0; QUEUE_SIZE],
- //           pending_slices: [0; QUEUE_SIZE],
-            w_ind: 0,
-            r_ind: 0,
+            r_ind : 0,
+            w_ind : 0,
             sum: AtomicI64::new(0),
             epoch: AtomicI64::new(0),
         }
@@ -193,26 +191,25 @@ impl<T:Default + Clone> Default for Queue<T> {
 impl<T:Default> Queue<T> {
     fn commit_tx(&mut self, tx_id: usize) {
         // commit the tx (do not finalize with 0 yet)
+//        unsafe{std::ptr::write_volatile(&mut self.pending_transactions[tx_id],
+ //                                       std::ptr::read_volatile(&self.pending_transactions[tx_id]) * -1)};
         self.pending_transactions[tx_id] *= -1;
+        fence(Ordering::SeqCst);
         loop {
             let last_tx = self.last_commited_tx.load(Ordering::SeqCst);
             let mut cond = (last_tx + 1) % QUEUE_SIZE as i64 != tx_id as i64;
 //            println!("tx_id  {}, expected tx_id {}, tail {}, shadow tail {}, head {}, shadow head {}", tx_id, last_tx + 1, self.tail.load(Ordering::SeqCst), self.shadow_tail.load(Ordering::SeqCst), self.head.load(Ordering::SeqCst), self.shadow_head.load(Ordering::SeqCst));
-            // breaking.
+//            println!("tx_id  {}, expected tx_id {}", tx_id, last_tx + 1);
             // if we enter this condition, this tx is immediately after last commited tx
             if !cond {
-//                println!("tx_id  {}, tail {}", tx_id, self.tail.load(Ordering::SeqCst));
                 let mut max_tx_id = tx_id as i64;
                 let mut sum = 0;
-                while self.pending_transactions[max_tx_id as usize] > 0 {
-//                    println!("tx {}, curr_max_tx {}", tx_id, max_tx_id);
-                    sum += self.pending_transactions[max_tx_id as usize];
+                while unsafe{std::ptr::read_volatile(&(self.pending_transactions[max_tx_id as usize]))} > 0 {
+                    sum += unsafe{std::ptr::read_volatile(&self.pending_transactions[max_tx_id as usize])};
                     max_tx_id = (max_tx_id + 1) % QUEUE_SIZE as i64;
                 }
-//                println!("vghka");
                 // the actual max_tx_id is the previous one
                 max_tx_id = (max_tx_id - 1).rem_euclid(QUEUE_SIZE as i64);
-//                max_tx_id -= 1;
 
                 cond = self.last_commited_tx.compare_exchange(
                     last_tx, max_tx_id as i64, 
@@ -221,9 +218,9 @@ impl<T:Default> Queue<T> {
                 if cond {
                     // ensure that we don't commit transactions/ proceed tail 
                     // before the previous transactions also got commited
-                    assert!(self.pending_transactions[tx_id as usize] > 0);
+                    //assert!(self.pending_transactions[tx_id as usize] > 0);
                     loop {
-                        if self.pending_transactions[(tx_id as i64 - 1).rem_euclid(QUEUE_SIZE as i64) as usize] == 0 {
+                        if unsafe{std::ptr::read_volatile(&self.pending_transactions[(tx_id as i64 - 1).rem_euclid(QUEUE_SIZE as i64) as usize])} == 0 {
                             break;
                         }
                     }
@@ -238,11 +235,10 @@ impl<T:Default> Queue<T> {
                             continue;
                         }
                     }
-                        
                     // COMMIT transactions
-//                    println!("{}", max_tx_id);
                     let mut next_tx = tx_id as i64;
                     while next_tx != max_tx_id {
+                        //unsafe{std::ptr::write_volatile(&mut self.pending_transactions[next_tx as usize], 0)};
                         self.pending_transactions[next_tx as usize] = 0;
                         next_tx = (next_tx + 1) % QUEUE_SIZE as i64;
                     }
@@ -276,7 +272,6 @@ impl<T:Default> Queue<T> {
  //               }
 //                println!("read tx : {}, now tx : {}", last_tx, self.last_commited_tx.load(Ordering::SeqCst));
             }
-//            break;
         }
     }
 
@@ -316,12 +311,11 @@ impl<T:Default> Queue<T> {
                 break;
             }
             else {
-//                    println!("Debug");
+//                println!("Debug");
             }
         }
-//        println!("cur {} with tx_id {}", cur, tx_id);
-        assert!(self.pending_transactions[tx_id as usize] == 0);
-        self.pending_transactions[tx_id as usize] = -(count as i64);
+//        assert!(self.pending_transactions[tx_id as usize] == 0);
+        unsafe{std::ptr::write_volatile(&mut self.pending_transactions[tx_id as usize], -(count as i64))};
         
 //        println!("cur {}, tx_id {}, pending_trans {}", cur, tx_id, self.pending_transactions[tx_id as usize]);
 
@@ -366,6 +360,7 @@ impl<T:Default> Queue<T> {
         } else {
             QUEUE_SIZE - s_head + tail
         };
+        //println!("Hi head {}, tail {} ", s_head, tail);
 
         return ret as usize;
     }
@@ -417,7 +412,7 @@ impl<T:Default> Queue<T> {
             }
         }
 //        println!("offset {}, s_id {}", cur, s_id);
-        assert!(self.pending_slices[s_id as usize] == 0);
+        //assert!(self.pending_slices[s_id as usize] == 0);
         self.pending_slices[s_id as usize] = -(len as i64);
         return Some(Slice{queue: self, offset: cur, slice_id: s_id, len: len});
     }

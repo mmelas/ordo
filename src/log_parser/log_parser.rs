@@ -8,7 +8,11 @@ use crate::metrics;
 use crate::metric::Metric;
 use std::sync::Arc;
 use std::fs::File;
+use std::time::{Instant, Duration};
+use std::thread;
+use crate::params;
 
+const PRODUCERS : i64 = params::PRODUCERS;
 
 // NewType design in order to make
 // raw pointer Send + Sync
@@ -95,16 +99,15 @@ pub fn run() {
 
  //   let metrics_arc = Arc::new(metrics);
 //    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
-    let p1 = file_reader::FileReader::new_with_single(0, q, q, "combined_texts.txt".to_owned(), 50, m_0);
+    let p1 = file_reader::FileReader::new_with_single(0, q, q, "../c_texts.txt".to_owned(), PRODUCERS, metrics);
 //    let metrics_c = metrics_arc.clone();
 //    let metrics_c2 = metrics_arc.clone();
 
-    let p2 = split_string::SplitString::new(1, q, q2, m_1);
+    let p2 = split_string::SplitString::new(1, q, q2, metrics);
 
-    let p3 = apply_regex::AppRegex::new(2, q2, q3, m_2);
+    let p3 = apply_regex::AppRegex::new(2, q2, q3, metrics);
 
-    let p4 = output_results::Output::new(3, q3, q3, m_3);
-
+    let p4 = output_results::Output::new(3, q3, q3, metrics);
 
     pr.add_process(Box::leak(Box::new(p1)));
     pr.add_process(Box::leak(Box::new(p2)));
@@ -112,5 +115,8 @@ pub fn run() {
     pr.add_process(Box::leak(Box::new(p4)));
     pr.start();
 
-    loop {}
+    loop {
+        thread::sleep(Duration::from_millis(500));
+        metrics.print_metrics();
+    }
 }

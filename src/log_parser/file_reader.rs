@@ -6,19 +6,20 @@ use std::path::Path;
 use std::fs::File;
 use std::{cmp, mem};
 use std::io::prelude::*;
-use crate::metric::Metric;
+use crate::metrics::Metrics;
+use std::time::Duration;
 
-// (operator) read a file and wrie to its output queue
-// each line as a String
+// (operator) read a file and write to its (operator's)
+// output queue each line as a String
 
-const WEIGHT : f64 = 1.0;
+const WEIGHT : f64 = 1.00000;
 
 pub struct FileReader {
     id : usize,
     pub inputs: *mut fifo::Queue<String>,
     pub outputs: *mut fifo::Queue<String>,
     pub lines: Mutex<Vec<(io::BufReader<File>, u64)>>,
-    metric: *mut Metric
+    metrics: *mut Metrics<'static>
 }
 
 unsafe impl Send for FileReader {}
@@ -34,7 +35,7 @@ impl FileReader {
         ins : *mut fifo::Queue<String>, 
         outs : *mut fifo::Queue<String>, 
         files : Vec<String>,
-        metric : *mut Metric
+        metrics : *mut Metrics<'static>
     ) -> FileReader {
         let mut buf_readers = Vec::new();
         for f in files {
@@ -46,7 +47,7 @@ impl FileReader {
         FileReader {
             id : id, inputs: ins, outputs: outs, 
             lines: Mutex::new(buf_readers),
-            metric: metric
+            metrics: metrics
         }
     }
 
@@ -55,7 +56,7 @@ impl FileReader {
         ins : *mut fifo::Queue<String>, 
         outs : *mut fifo::Queue<String>, 
         f_name : String, partitions : i64,
-        metric: *mut Metric
+        metrics : *mut Metrics<'static>
     ) -> FileReader {
         let lines = Mutex::new(Vec::new());
 
@@ -77,7 +78,7 @@ impl FileReader {
             ); 
             prev_idx = upper_bound;
         }
-        FileReader {id : id, inputs: ins, outputs: outs, lines: lines, metric: metric}
+        FileReader {id : id, inputs: ins, outputs: outs, lines: lines, metrics : metrics}
     }
 
     fn get_next_br(mut f : File, os : i64) -> io::BufReader<File> {
@@ -94,7 +95,6 @@ impl FileReader {
                 None => break,
             }
         }
-        bytes.next(); //skip new line byte
         return br;
     }
 
@@ -116,16 +116,34 @@ impl process::Process for FileReader {
 
         // Read lines of current bufreader
         let mut current_pos = buf_reader.seek(SeekFrom::Current(0)).unwrap();
-        let mut next_line;
-        let mut lines_read = 0;
+
+//        let mut ws;
+//        loop {
+//            ws = unsafe {
+//                (*self.outputs).reserve(batch_size as usize)
+//            };
+//            if ws.is_some() {
+//                break;
+//            }
+//            println!("HIHI fr");
+//        }
+//        let mut wslice = ws.unwrap();
+
+        let mut total_lines = 0;
         while batch_size > 0 && current_pos < upper_bound {
             batch_size -= 1;
-            lines_read += 1;
-            next_line = "".to_owned();
+//            for _ in 0..500 {
+            let mut next_line = String::new();
             current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
-            vec_lines.push(next_line);
+//            println!("{}", next_line);
+//            unsafe{wslice.update(next_line)}
+            total_lines += 1;
+//            }
+//            println!("{}", next_line);
+            vec_lines.push(next_line.trim().to_owned());
         } 
-        unsafe{(*self.metric).update(lines_read, vec_lines.len() as i64)}
+//        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+        unsafe{(*self.metrics).proc_metrics[self.id].update(vec_lines.len() as i64, vec_lines.len() as i64)}
 
         let mut ws;
         loop {
@@ -135,6 +153,7 @@ impl process::Process for FileReader {
             if ws.is_some() {
                 break;
             }
+            println!("HIHI fr");
         }
         let mut wslice = ws.unwrap();
         for line in vec_lines {
@@ -145,6 +164,7 @@ impl process::Process for FileReader {
         if buf_reader.seek(SeekFrom::Current(0)).unwrap() < upper_bound {
             self.lines.lock().unwrap().push((buf_reader, upper_bound));
         }
+//        println!("HI4");
     }
 
 //    fn activate(&self, mut batch_size : i64) {
