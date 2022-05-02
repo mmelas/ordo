@@ -55,18 +55,6 @@ impl<'a> Metrics<'a> {
         self.proc_metrics.push(metric);
     }
 
-    pub fn update_s_duration(&mut self, d : Duration) {
-//        *self.splits_time.lock().unwrap() += d;
-
-//        if self.splits_time.lock().unwrap().as_millis() >= 500 {
-//            println!("{:?}", *self.splits_time.lock().unwrap());
-//            *self.splits_time.lock().unwrap() = Duration::new(0, 0);
-//            println!{"yes"}
-//        }
-//        println!("Total duration for splitting {:?}", self.splits_time);
-//        self.proc_metrics.push(metric);
-    }
-
     pub fn print_metrics(&self) {
         for metric in &self.proc_metrics {
             println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in : {}",

@@ -12,7 +12,7 @@ use std::time::Duration;
 // (operator) read a file and write to its (operator's)
 // output queue each line as a String
 
-const WEIGHT : f64 = 1.00000;
+const WEIGHT : f64 = 0.10000;
 
 pub struct FileReader {
     id : usize,

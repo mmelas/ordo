@@ -255,6 +255,7 @@ impl<T:Default> Queue<T> {
                             break;
                         }
                     }
+                    //println!("{:p}, {} {}", &self, self.tail.load(Ordering::SeqCst), sum);
 //                    println!("tx {}, new max_tx_id {}, p_tail {}, n_tail {}, shadow tail {}, sum {}, total_sum {}, prev_sum {}, head {}, shadow head {}", tx_id, max_tx_id, prev_tail, (prev_tail + sum as usize) % QUEUE_SIZE, self.shadow_tail.load(Ordering::SeqCst), sum, self.sum.load(Ordering::SeqCst), prev_sum, self.head.load(Ordering::SeqCst), self.shadow_head.load(Ordering::SeqCst));
 //                    println!("tx {} Commited, new max_tx_id {}, new tail {}, shadow tail {}, sum {}", tx_id, max_tx_id, self.tail.load(Ordering::SeqCst), self.shadow_tail.load(Ordering::SeqCst), sum);
                    break;
