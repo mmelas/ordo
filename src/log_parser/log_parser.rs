@@ -73,7 +73,6 @@ const PRODUCERS : i64 = params::PRODUCERS;
 //}
 
 pub fn run() {
-    let pr = Box::leak(Box::new(process::ProcessRunner::new()));
     let q = Box::leak(Box::new(fifo::Queue{..Default::default()}));
     let q2 = Box::leak(Box::new(fifo::Queue{..Default::default()}));
     let q3 = Box::leak(Box::new(fifo::Queue{..Default::default()}));
@@ -109,6 +108,7 @@ pub fn run() {
 
     let p4 = output_results::Output::new(3, q3, q3, metrics);
 
+    let pr = Box::leak(Box::new(process::ProcessRunner::new(metrics)));
     pr.add_process(Box::leak(Box::new(p1)));
     pr.add_process(Box::leak(Box::new(p2)));
     pr.add_process(Box::leak(Box::new(p3)));

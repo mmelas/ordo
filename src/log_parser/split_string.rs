@@ -5,11 +5,11 @@ use crate::metrics::Metrics;
 use std::sync::Arc;
 use std::time::Instant;
 
-const WEIGHT : f64 = 0.100000;
+const WEIGHT : f64 = 1.000000;
 
 pub struct SplitString {
     id : usize,
-    pub inputs: *mut fifo::Queue<String>,
+    pub inputs: *mut fifo::Queue<Option<String>>,
     pub outputs: *mut fifo::Queue<Option<String>>,
     pub metrics : *mut Metrics<'static>
 }
@@ -20,11 +20,24 @@ unsafe impl Sync for SplitString {}
 impl SplitString {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<String>, 
+        ins : *mut fifo::Queue<Option<String>>, 
         outs : *mut fifo::Queue<Option<String>>, 
         metrics : *mut Metrics<'static>
     ) -> SplitString {
         SplitString {id : id, inputs : ins, outputs : outs, metrics : metrics}
+    }
+
+    fn split(inp : &String, ws : &mut fifo::WritableSlice<Option<String>>) {
+        let mut before_space = 0;
+        let mut ind = 0;
+        for c in inp.chars() {
+            if c == ' ' {
+                //let word = inp[before_space+1..ind].to_owned();
+                unsafe{ws.update(Some((&inp[before_space+1..ind]).to_owned()))};
+                before_space = ind;
+            }
+            ind += 1;
+        }
     }
 }
 
@@ -59,20 +72,24 @@ impl process::Process for SplitString {
                 let mut total_words= 0;
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
-                    let splitted_line = slice.queue.buffer[ind].split(" ");
-                    // there's a chance of reading empty line
-                    // because the next operator resets its read slice
-                    // values to empty strings
-//                    slice.queue.buffer[ind] = String::new();
-                    for word in splitted_line {
-                        unsafe{wslice.update(Some(word.to_owned()))};
-                        total_words += 1;
+                    //if slice.queue.fresh_val[ind] == false {
+                    //    continue;
+                    //}
+                    match &slice.queue.buffer[ind] {
+                        Some(line) => {
+                            SplitString::split(line, &mut wslice);
+                            total_words += 20;
+                            slice.queue.buffer[ind] = None;
+                            //slice.queue.fresh_val[ind] = false;
+                        },
+                        None => {}
                     }
                 }
-                unsafe{(*self.metrics).proc_metrics[self.id].update(slice.len as i64, total_words)};
+                slice.commit();
+                //println!("{} {}", total_words, 20*batch_size);
+                unsafe{(*self.metrics).proc_metrics[self.id].update(slice.len as i64, total_words)}; //TODO: include total_words instead of 20*batch_size
 
                 unsafe{wslice.commit()};
-                slice.commit();
             },
             None => {}
         }

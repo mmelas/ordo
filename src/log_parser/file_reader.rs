@@ -12,12 +12,12 @@ use std::time::Duration;
 // (operator) read a file and write to its (operator's)
 // output queue each line as a String
 
-const WEIGHT : f64 = 0.10000;
+const WEIGHT : f64 = 1.00000;
 
 pub struct FileReader {
     id : usize,
-    pub inputs: *mut fifo::Queue<String>,
-    pub outputs: *mut fifo::Queue<String>,
+    pub inputs: *mut fifo::Queue<Option<String>>,
+    pub outputs: *mut fifo::Queue<Option<String>>,
     pub lines: Mutex<Vec<(io::BufReader<File>, u64)>>,
     metrics: *mut Metrics<'static>
 }
@@ -32,8 +32,8 @@ impl FileReader {
 
     pub fn new_with_vector(
         id : usize,
-        ins : *mut fifo::Queue<String>, 
-        outs : *mut fifo::Queue<String>, 
+        ins : *mut fifo::Queue<Option<String>>, 
+        outs : *mut fifo::Queue<Option<String>>, 
         files : Vec<String>,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -53,8 +53,8 @@ impl FileReader {
 
     pub fn new_with_single(
         id : usize,
-        ins : *mut fifo::Queue<String>, 
-        outs : *mut fifo::Queue<String>, 
+        ins : *mut fifo::Queue<Option<String>>, 
+        outs : *mut fifo::Queue<Option<String>>, 
         f_name : String, partitions : i64,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -112,43 +112,14 @@ impl process::Process for FileReader {
             Some(x) => x,
             None => return
         };
-        let mut vec_lines = Vec::new();
 
         // Read lines of current bufreader
         let mut current_pos = buf_reader.seek(SeekFrom::Current(0)).unwrap();
 
-//        let mut ws;
-//        loop {
-//            ws = unsafe {
-//                (*self.outputs).reserve(batch_size as usize)
-//            };
-//            if ws.is_some() {
-//                break;
-//            }
-//            println!("HIHI fr");
-//        }
-//        let mut wslice = ws.unwrap();
-
-        let mut total_lines = 0;
-        while batch_size > 0 && current_pos < upper_bound {
-            batch_size -= 1;
-//            for _ in 0..500 {
-            let mut next_line = String::new();
-            current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
-//            println!("{}", next_line);
-//            unsafe{wslice.update(next_line)}
-            total_lines += 1;
-//            }
-//            println!("{}", next_line);
-            vec_lines.push(next_line.trim().to_owned());
-        } 
-//        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
-        unsafe{(*self.metrics).proc_metrics[self.id].update(vec_lines.len() as i64, vec_lines.len() as i64)}
-
         let mut ws;
         loop {
             ws = unsafe {
-                (*self.outputs).reserve(vec_lines.len())
+                (*self.outputs).reserve(batch_size as usize)
             };
             if ws.is_some() {
                 break;
@@ -156,15 +127,26 @@ impl process::Process for FileReader {
             println!("HIHI fr");
         }
         let mut wslice = ws.unwrap();
-        for line in vec_lines {
-            unsafe{wslice.update(line)};
-        }
+
+        let mut total_lines = 0;
+        while batch_size > 0 && current_pos < upper_bound {
+            let mut next_line = String::new();
+            batch_size -= 1;
+            current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
+            //if total_lines % 4 == 0 {
+            unsafe{wslice.update(Some(next_line))}
+            //    next_line = String::new();
+           // }
+            total_lines += 1;
+        } 
+//        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+
         unsafe{wslice.commit()};
 
         if buf_reader.seek(SeekFrom::Current(0)).unwrap() < upper_bound {
             self.lines.lock().unwrap().push((buf_reader, upper_bound));
         }
-//        println!("HI4");
     }
 
 //    fn activate(&self, mut batch_size : i64) {

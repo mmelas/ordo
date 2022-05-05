@@ -9,7 +9,7 @@ use std::sync::Arc;
 // of applying a regex to everything that comes into its
 // input Queue
 
-const WEIGHT : f64 = 2.00000;
+const WEIGHT : f64 = 24.00000;
 
 pub struct AppRegex {
     id : usize,
@@ -45,7 +45,7 @@ impl process::Process for AppRegex {
 
         let mut ws;
         loop { 
-            ws = unsafe{(*self.outputs).reserve(batch_size as usize / 3)};
+            ws = unsafe{(*self.outputs).reserve(batch_size as usize/3)};
             if ws.is_some() {
                 break;
             }
@@ -58,15 +58,20 @@ impl process::Process for AppRegex {
             Some(mut slice) => {
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
+                    //if slice.queue.fresh_val[ind] == false {
+                    //    continue;
+                    //}
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
                             if &word.as_bytes()[0] == &35 {
-                                unsafe{wslice.update(Some(word.clone()))};
+                                unsafe{wslice.update(Some(word.to_owned()))};
                                 total_words += 1;
                                 // make current entry as none in order
                                 // to not re-read it in the future 
-                                slice.queue.buffer[ind] = None;
                             }
+                            slice.queue.buffer[ind] = None;
+//                            unsafe{std::ptr::write_volatile(&mut slice.queue.fresh_val[ind], false);}
+                     //       slice.queue.fresh_val[ind] = false;
                         },
                         None => {}
                     }
@@ -76,7 +81,7 @@ impl process::Process for AppRegex {
             }, 
             None => {}
         }
-    unsafe{wslice.commit()};
+        unsafe{wslice.commit()};
     }
 
 

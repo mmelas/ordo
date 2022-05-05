@@ -14,6 +14,9 @@ pub struct Metrics<'a> {
     pub splits_time : Mutex<Duration>,
     pub proc_throughput : Mutex<BinaryHeap<Metric>>,
     pub proc_metrics : Vec<&'a mut Metric>,
+    pub activation : AtomicI64,
+    pub prev_act : i64,
+    pub process : Mutex<Vec<i64>>,
 }
 
 impl<'a> Default for Metrics<'a> {
@@ -24,7 +27,10 @@ impl<'a> Default for Metrics<'a> {
             hashtags_read : AtomicI64::new(0),
             proc_throughput : Mutex::new(BinaryHeap::new()),
             splits_time : Mutex::new(Duration::new(0, 0)),
-            proc_metrics : vec![]
+            proc_metrics : vec![],
+            activation : AtomicI64::new(0),
+            prev_act : 0,
+            process : Mutex::new(vec![0; 4]),
         }
     }
 }
@@ -55,12 +61,23 @@ impl<'a> Metrics<'a> {
         self.proc_metrics.push(metric);
     }
 
-    pub fn print_metrics(&self) {
+    pub fn update_activation(&mut self, a : i64) {
+        self.activation.fetch_add(a, Ordering::SeqCst);
+    }
+
+    pub fn update_process(&mut self, p : usize) {
+        self.process.lock().unwrap()[p] += 1;
+    }
+
+    pub fn print_metrics(&mut self) {
+        let act = self.activation.load(Ordering::SeqCst);
         for metric in &self.proc_metrics {
-            println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in : {}",
+            println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in : {}, total_activation_amount : {}",
                       metric.p_id, metric.inp_throughput.load(Ordering::SeqCst), metric.out_throughput.load(Ordering::SeqCst),
-                      metric.total_amount_in.load(Ordering::SeqCst));
+                      metric.total_amount_in.load(Ordering::SeqCst), act - self.prev_act);
+            //(*self.process.lock().unwrap()).iter_mut().for_each(|x| println!("{}", x));
         }
+        self.prev_act = act;
         println!("---------------------------------------------");
     }
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 // Operator that writes to the terminal everything that
 // comes into its input Queue
 
-const WEIGHT : f64 = 2.000000;
+const WEIGHT : f64 = 10.000000;
 
 pub struct Output {
     id : usize,
@@ -44,10 +44,16 @@ impl process::Process for Output {
             Some(mut slice) => {
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
+                    //if slice.queue.fresh_val[ind] == false {
+                    //    continue;
+                    //}
                     match &slice.queue.buffer[ind] {
-                        Some(_) => {
-                            total_hashtags += 1;
+                        Some(word) => {
+                            if &word.as_bytes()[0] == &35 {
+                                total_hashtags += 1;
+                            }
                             slice.queue.buffer[ind] = None;
+                     //       slice.queue.fresh_val[ind] = false;
                         },
                         None => {}
                     }
