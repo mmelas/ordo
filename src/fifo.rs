@@ -29,6 +29,7 @@ pub struct Queue<T:Default> {
     pub last_rslice_id: AtomicI64,
     pub pending_slices: Vec<i64>, //TODO: set correct size
     pub epoch: AtomicI64,
+    pub fresh_val: Vec<bool>,
     pub r_ind: usize,
     pub w_ind: usize,
     pub sum: AtomicI64,
@@ -155,6 +156,7 @@ impl<'a, T:Default> WritableSlice<'a, T> {
         let ind = (self.offset + self.curr_i) % QUEUE_SIZE;
         self.queue.buffer[ind] = v;
         self.curr_i += 1;
+        self.queue.fresh_val[ind] = true;
     }
 
     pub unsafe fn commit(&mut self)  {
@@ -180,6 +182,7 @@ impl<T:Default + Clone> Default for Queue<T> {
             next_rslice_id: AtomicI64::new(0),
             last_rslice_id: AtomicI64::new(-1),
             pending_slices: vec![0; QUEUE_SIZE],
+            fresh_val: vec![false; QUEUE_SIZE],
             r_ind : 0,
             w_ind : 0,
             sum: AtomicI64::new(0),

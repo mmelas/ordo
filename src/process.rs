@@ -51,6 +51,12 @@ impl ProcessRunner {
             });
         }
 //        self.thread_pool.execute(|| {
+//            self.processes[4].activate(WRITE_SLICE_S);
+//        });
+//        self.thread_pool.execute(|| {
+//            self.processes[5].activate(WRITE_SLICE_S);
+//        });
+//        self.thread_pool.execute(|| {
 //            loop {
 //                if self.processes[0].activation() > 0 {
 //                    self.processes[0].activate(WRITE_SLICE_S);
@@ -59,8 +65,8 @@ impl ProcessRunner {
 //        });
 //        self.thread_pool.execute(|| {
 //            loop {
-//                if self.processes[0].activation() > 0 {
-//                    self.processes[0].activate(WRITE_SLICE_S);
+//                if self.processes[1].activation() > 0 {
+//                    self.processes[1].activate(WRITE_SLICE_S);
 //                }
 //            }
 //        });

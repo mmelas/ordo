@@ -4,6 +4,7 @@ use crate::log_parser::file_reader;
 use crate::log_parser::apply_regex;
 use crate::log_parser::output_results;
 use crate::log_parser::split_string;
+use crate::log_parser::clean_queue;
 use crate::metrics;
 use crate::metric::Metric;
 use std::sync::Arc;
@@ -108,11 +109,17 @@ pub fn run() {
 
     let p4 = output_results::Output::new(3, q3, q3, metrics);
 
+    let p5 = clean_queue::CleanQueue::new(4, q2, q2, metrics);
+
+    let p6 = clean_queue::CleanQueue::new(5, q, q, metrics);
+
     let pr = Box::leak(Box::new(process::ProcessRunner::new(metrics)));
     pr.add_process(Box::leak(Box::new(p1)));
     pr.add_process(Box::leak(Box::new(p2)));
     pr.add_process(Box::leak(Box::new(p3)));
     pr.add_process(Box::leak(Box::new(p4)));
+//    pr.add_process(Box::leak(Box::new(p5)));
+//    pr.add_process(Box::leak(Box::new(p6)));
     pr.start();
 
     loop {
