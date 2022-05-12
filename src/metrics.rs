@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::collections::binary_heap::BinaryHeap;
 use std::collections::HashMap;
@@ -17,6 +17,9 @@ pub struct Metrics<'a> {
     pub activation : AtomicI64,
     pub prev_act : i64,
     pub process : Mutex<Vec<i64>>,
+    pub reserve_time : AtomicU64,
+    pub commit_time : AtomicU64,
+    pub read_time : AtomicU64,
 }
 
 impl<'a> Default for Metrics<'a> {
@@ -31,6 +34,9 @@ impl<'a> Default for Metrics<'a> {
             activation : AtomicI64::new(0),
             prev_act : 0,
             process : Mutex::new(vec![0; 4]),
+            reserve_time : AtomicU64::new(0),
+            commit_time : AtomicU64::new(0),
+            read_time : AtomicU64::new(0),
         }
     }
 }
@@ -69,14 +75,30 @@ impl<'a> Metrics<'a> {
         self.process.lock().unwrap()[p] += 1;
     }
 
+    pub fn update_reserve_time(&mut self, t : u64) {
+        self.reserve_time.fetch_add(t, Ordering::SeqCst);
+    }
+
+    pub fn update_commit_time(&mut self, t : u64) {
+        self.commit_time.fetch_add(t, Ordering::SeqCst);
+    }
+
+    pub fn update_read_time(&mut self, t : u64) {
+        self.read_time.fetch_add(t, Ordering::SeqCst);
+    }
+
     pub fn print_metrics(&mut self) {
         let act = self.activation.load(Ordering::SeqCst);
         for metric in &self.proc_metrics {
-            println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in : {}, total_activation_amount : {}",
+            println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in : {}, total_activation_amount : {}, total_reserve_time : {:?}, total_commit_time : {:?}, total_read_time : {:?}",
                       metric.p_id, metric.inp_throughput.load(Ordering::SeqCst), metric.out_throughput.load(Ordering::SeqCst),
-                      metric.total_amount_in.load(Ordering::SeqCst), act - self.prev_act);
+                      metric.total_amount_in.load(Ordering::SeqCst), act - self.prev_act, self.reserve_time.load(Ordering::SeqCst), 
+                      self.commit_time.load(Ordering::SeqCst), self.read_time.load(Ordering::SeqCst));
             //(*self.process.lock().unwrap()).iter_mut().for_each(|x| println!("{}", x));
         }
+        self.reserve_time.store(0, Ordering::SeqCst);
+        self.commit_time.store(0, Ordering::SeqCst);
+        self.read_time.store(0, Ordering::SeqCst);
         self.prev_act = act;
         println!("---------------------------------------------");
     }

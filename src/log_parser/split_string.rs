@@ -4,12 +4,14 @@ use crate::params;
 use crate::metrics::Metrics;
 use std::sync::Arc;
 use std::time::Instant;
+use smartstring::alias::String;
+//use heapless::String;
 
-const WEIGHT : f64 = 1.000000;
+const WEIGHT : f64 = 1.200000;
 
 pub struct SplitString {
     id : usize,
-    pub inputs: *mut fifo::Queue<Option<String>>,
+    pub inputs: *mut fifo::Queue<Option<std::string::String>>,
     pub outputs: *mut fifo::Queue<Option<String>>,
     pub metrics : *mut Metrics<'static>
 }
@@ -20,25 +22,46 @@ unsafe impl Sync for SplitString {}
 impl SplitString {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<Option<String>>, 
+        ins : *mut fifo::Queue<Option<std::string::String>>, 
         outs : *mut fifo::Queue<Option<String>>, 
         metrics : *mut Metrics<'static>
     ) -> SplitString {
         SplitString {id : id, inputs : ins, outputs : outs, metrics : metrics}
     }
 
-    fn split(inp : &String, ws : &mut fifo::WritableSlice<Option<String>>) {
+    fn split_string(inp : &std::string::String, ws : &mut fifo::WritableSlice<Option<String>>) {
         let mut before_space = 0;
         let mut ind = 0;
-        for c in inp.chars() {
-            if c == ' ' {
-                //let word = inp[before_space+1..ind].to_owned();
-                unsafe{ws.update(Some((&inp[before_space+1..ind]).to_owned()))};
-                before_space = ind;
+        let len = inp.len();
+        
+        for b in inp.bytes() {
+            if ind == len - 1 || b == b' ' {
+                if before_space <  ind {
+                    //let word = inp[before_space+1..ind].to_owned();
+                    unsafe{ws.update(Some(String::from(&inp[before_space..ind])))};
+                }
+                before_space = ind + 1;
             }
             ind += 1;
         }
     }
+
+//    fn split_bytes(inp : &Vec<u8>, ws : &mut fifo::WritableSlice<Option<String<20>>>) {
+//        let mut before_space = 0;
+//        let mut ind = 0;
+//        let len = inp.len();
+//
+//        for b in inp {
+//            if (ind == len - 1 || b == &b' ')  {
+//                if before_space < ind  {
+//                    //unsafe{println!("{}",String::from_utf8_unchecked(Vec::from_iter(inp[before_space..ind].iter().cloned())));}
+//                    unsafe{ws.update(Some(String::from_utf8_unchecked(Vec::from_iter(inp[before_space..ind].iter().cloned()))))}
+//                }
+//                before_space = ind + 1;
+//            } 
+//            ind += 1;
+//        }
+//    }
 }
 
 impl process::Process for SplitString {
@@ -72,20 +95,25 @@ impl process::Process for SplitString {
                 let mut total_words= 0;
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
-                    //if slice.queue.fresh_val[ind] == false {
-                    //    continue;
-                    //}
+                    if slice.queue.fresh_val[ind] == false {
+                        continue;
+                    }
                     match &slice.queue.buffer[ind] {
                         Some(line) => {
-                            SplitString::split(line, &mut wslice);
+                            SplitString::split_string(line, &mut wslice);
+                            //SplitString::split_bytes(line, &mut wslice);
+                            //unsafe{(*self.metrics).reserve_time.fetch_add(t1, std::sync::atomic::Ordering::SeqCst);}
                             total_words += 20;
-                            slice.queue.buffer[ind] = None;
-                            //slice.queue.fresh_val[ind] = false;
+                            //slice.queue.buffer[ind] = None;
+                            slice.queue.fresh_val[ind] = false;
                         },
                         None => {}
                     }
                 }
                 slice.commit();
+                if batch_size*20 < total_words {
+                    println!("HI");
+                }
                 //println!("{} {}", total_words, 20*batch_size);
                 unsafe{(*self.metrics).proc_metrics[self.id].update(slice.len as i64, total_words)}; //TODO: include total_words instead of 20*batch_size
 

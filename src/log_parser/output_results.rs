@@ -3,11 +3,12 @@ use crate::fifo;
 use crate::params;
 use crate::metrics::Metrics;
 use std::sync::Arc;
+use smartstring::alias::String;
 
 // Operator that writes to the terminal everything that
 // comes into its input Queue
 
-const WEIGHT : f64 = 10.000000;
+const WEIGHT : f64 = 42.000000;
 
 pub struct Output {
     id : usize,
@@ -49,7 +50,7 @@ impl process::Process for Output {
                     //}
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
-                            if &word.as_bytes()[0] == &35 {
+                            if word.as_bytes()[0] == b'#' {
                                 total_hashtags += 1;
                             }
                             slice.queue.buffer[ind] = None;

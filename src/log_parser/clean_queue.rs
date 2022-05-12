@@ -13,29 +13,29 @@ const WEIGHT : f64 = 10000.00000;
 
 //TODO: Have one thread only running this at first 
 //and then maybe add atomicusize instead of usize (for more threads)
-pub struct CleanQueue {
+pub struct CleanQueue<T> {
     id : usize,
     last_cleaned_ind : usize,
-    pub inputs: *mut fifo::Queue<Option<String>>,
-    pub outputs: *mut fifo::Queue<Option<String>>,
+    pub inputs: *mut fifo::Queue<Option<T>>,
+    pub outputs: *mut fifo::Queue<Option<T>>,
     pub metrics: *mut Metrics<'static>
 }
 
-unsafe impl Send for CleanQueue {}
-unsafe impl Sync for CleanQueue {}
+unsafe impl<T> Send for CleanQueue<T> {}
+unsafe impl<T> Sync for CleanQueue<T> {}
 
-impl CleanQueue {
+impl<T> CleanQueue<T> {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<Option<String>>, 
-        outs : *mut fifo::Queue<Option<String>>, 
+        ins : *mut fifo::Queue<Option<T>>, 
+        outs : *mut fifo::Queue<Option<T>>, 
         metrics : *mut Metrics<'static>
-    ) -> CleanQueue {
+    ) -> CleanQueue<T> {
         CleanQueue {id : id, inputs : ins, outputs : outs, metrics: metrics, last_cleaned_ind : 0}
     }
 }
 
-impl process::Process for CleanQueue {
+impl<T> process::Process for CleanQueue<T> {
     fn activation(&self) -> i64 {
         return 1;
         //unsafe{(*self.inputs).fresh_val[self.last_cleaned_ind] as i64}
@@ -44,11 +44,19 @@ impl process::Process for CleanQueue {
     fn activate(&self, batch_size : i64) {
         let mut last_cleaned_ind = 0;
         loop {
-            if unsafe{(*self.inputs).fresh_val[self.last_cleaned_ind]} {
-                unsafe{(*self.inputs).buffer[self.last_cleaned_ind] = None};
-                unsafe{(*self.inputs).fresh_val[self.last_cleaned_ind] = false};
+            if unsafe{!std::ptr::read_volatile(&(*self.inputs).fresh_val[last_cleaned_ind])} {
+                match unsafe{&(*self.inputs).buffer[last_cleaned_ind]} {
+                    Some(_) => {
+                        unsafe{drop(&(*self.inputs).buffer[last_cleaned_ind])}
+                        //println!("HI {}", last_cleaned_ind);
+                    }, 
+                    None => {/*println!("None {}", last_cleaned_ind)*/}
+                }
+                //unsafe{(*self.inputs).buffer[last_cleaned_ind] = None}
+                //unsafe{drop(&(*self.inputs).buffer[last_cleaned_ind])}
+                unsafe{(*self.inputs).fresh_val[last_cleaned_ind] = true};
                 last_cleaned_ind = (last_cleaned_ind + 1) % params::QUEUE_SIZE;
-                
+                //println!("{}", last_cleaned_ind);
             }
         }
     }

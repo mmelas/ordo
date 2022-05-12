@@ -12,7 +12,7 @@ use std::time::Duration;
 // (operator) read a file and write to its (operator's)
 // output queue each line as a String
 
-const WEIGHT : f64 = 1.00000;
+const WEIGHT : f64 = 1.20000;
 
 pub struct FileReader {
     id : usize,
@@ -32,8 +32,8 @@ impl FileReader {
 
     pub fn new_with_vector(
         id : usize,
-        ins : *mut fifo::Queue<Option<String>>, 
-        outs : *mut fifo::Queue<Option<String>>, 
+        ins : *mut fifo::Queue<Option<String>>,
+        outs : *mut fifo::Queue<Option<String>>,
         files : Vec<String>,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -53,8 +53,8 @@ impl FileReader {
 
     pub fn new_with_single(
         id : usize,
-        ins : *mut fifo::Queue<Option<String>>, 
-        outs : *mut fifo::Queue<Option<String>>, 
+        ins : *mut fifo::Queue<Option<String>>,
+        outs : *mut fifo::Queue<Option<String>>,
         f_name : String, partitions : i64,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -68,7 +68,7 @@ impl FileReader {
         let mut prev_idx = 0;
         for p in 1..partitions + 1 {
             let mut next_br;
-            let os = p*sep;
+            let os = p * sep;
             let file = File::open(&f_name).unwrap();
             next_br = FileReader::get_next_br(file, os);
             let upper_bound = next_br.seek(SeekFrom::Current(0)).unwrap();
@@ -83,7 +83,7 @@ impl FileReader {
 
     fn get_next_br(mut f : File, os : i64) -> io::BufReader<File> {
         let _ = f.seek(SeekFrom::Start(os as u64));
-        let mut br = io::BufReader::new(f);
+        let mut br = io::BufReader::with_capacity(50_000, f);
         let mut bytes = br.by_ref().bytes();
 
         loop { 
@@ -117,6 +117,7 @@ impl process::Process for FileReader {
         let mut current_pos = buf_reader.seek(SeekFrom::Current(0)).unwrap();
 
         let mut ws;
+        let mut t0 = std::time::Instant::now();
         loop {
             ws = unsafe {
                 (*self.outputs).reserve(batch_size as usize)
@@ -126,62 +127,41 @@ impl process::Process for FileReader {
             }
             println!("HIHI fr");
         }
+        let mut t1 = t0.elapsed().as_nanos();
+        unsafe{(*self.metrics).update_reserve_time(t1 as u64);}
         let mut wslice = ws.unwrap();
 
         let mut total_lines = 0;
+        t0 = std::time::Instant::now();
         while batch_size > 0 && current_pos < upper_bound {
-            let mut next_line = String::new();
+            let mut next_line = vec![];
+           // let mut next_line = String::with_capacity(50);
             batch_size -= 1;
-            current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
+            current_pos += buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
+            //current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
             //if total_lines % 4 == 0 {
-            unsafe{wslice.update(Some(next_line))}
+            let s = unsafe{String::from_utf8_unchecked(next_line)};
+            //let ss = smartstring::alias::String::from(s);
+            unsafe{wslice.update(Some(s))}
+            //unsafe{wslice.update(Some(String::from_utf8_unchecked(next_line)))}
+            //unsafe{wslice.update(Some(next_line))}
             //    next_line = String::new();
            // }
             total_lines += 1;
         } 
-//        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
-        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+        t1 = t0.elapsed().as_nanos();
+        unsafe{(*self.metrics).update_read_time(t1 as u64);}
 
+        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+        //unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+
+        t0 = std::time::Instant::now();
         unsafe{wslice.commit()};
+        t1 = t0.elapsed().as_nanos();
+        unsafe{(*self.metrics).update_commit_time(t1 as u64);}
 
         if buf_reader.seek(SeekFrom::Current(0)).unwrap() < upper_bound {
             self.lines.lock().unwrap().push((buf_reader, upper_bound));
         }
     }
-
-//    fn activate(&self, mut batch_size : i64) {
-//        let lines = self.lines.lock().unwrap().pop();
-//        let tuple = match lines {
-//            Some(x) => x,
-//            None => return
-//        };
-//        let (mut buf_reader, upper_bound) = tuple;
-//
-//        let mut current_pos = buf_reader.seek(SeekFrom::Current(0)).unwrap();
-//        loop {
-//            let ws = unsafe {
-//                (*self.outputs).reserve(batch_size as usize)
-//            };
-//
-//            match ws {
-//                Some(mut x) => {
-//                    // Read lines of current bufreader
-//                    while batch_size > 0 && 
-//                          current_pos < upper_bound {
-//                        batch_size -= 1;
-//                        let mut next_line = "".to_owned();
-//                        current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
-//                        unsafe{x.update(next_line);}
-//                    } 
-//                    unsafe{x.commit()};
-//                    break;
-//                },
-//                None => {}
-//            }
-//        }
-//
-//        if current_pos < upper_bound {
-//            self.lines.lock().unwrap().push((buf_reader, upper_bound));
-//        }
-//    }
 }

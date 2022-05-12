@@ -5,6 +5,7 @@ use crate::params;
 use std::sync::atomic::compiler_fence;
 use std::sync::atomic::fence;
 use std::time::Instant;
+use crate::metrics;
 
 const QUEUE_SIZE : usize = params::QUEUE_SIZE;
 const WRITE_SLICE_S : usize = params::WRITE_SLICE_S;
@@ -182,7 +183,7 @@ impl<T:Default + Clone> Default for Queue<T> {
             next_rslice_id: AtomicI64::new(0),
             last_rslice_id: AtomicI64::new(-1),
             pending_slices: vec![0; QUEUE_SIZE],
-            fresh_val: vec![false; QUEUE_SIZE],
+            fresh_val: vec![true; QUEUE_SIZE],
             r_ind : 0,
             w_ind : 0,
             sum: AtomicI64::new(0),

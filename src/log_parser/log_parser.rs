@@ -109,9 +109,9 @@ pub fn run() {
 
     let p4 = output_results::Output::new(3, q3, q3, metrics);
 
-    let p5 = clean_queue::CleanQueue::new(4, q2, q2, metrics);
-
-    let p6 = clean_queue::CleanQueue::new(5, q, q, metrics);
+//    let p5 = clean_queue::CleanQueue::new(4, q2, q2, metrics);
+//
+//    let p6 = clean_queue::CleanQueue::new(5, q, q, metrics);
 
     let pr = Box::leak(Box::new(process::ProcessRunner::new(metrics)));
     pr.add_process(Box::leak(Box::new(p1)));
