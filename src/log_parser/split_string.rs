@@ -11,8 +11,8 @@ const WEIGHT : f64 = 1.200000;
 
 pub struct SplitString {
     id : usize,
-    pub inputs: *mut fifo::Queue<Option<std::string::String>>,
-    pub outputs: *mut fifo::Queue<Option<String>>,
+    pub inputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
+    pub outputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
     pub metrics : *mut Metrics<'static>
 }
 
@@ -22,46 +22,47 @@ unsafe impl Sync for SplitString {}
 impl SplitString {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<Option<std::string::String>>, 
-        outs : *mut fifo::Queue<Option<String>>, 
+        ins : *mut fifo::Queue<Option<Arc<Vec<u8>>>>, 
+        outs : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
         metrics : *mut Metrics<'static>
     ) -> SplitString {
         SplitString {id : id, inputs : ins, outputs : outs, metrics : metrics}
     }
 
-    fn split_string(inp : &std::string::String, ws : &mut fifo::WritableSlice<Option<String>>) {
-        let mut before_space = 0;
-        let mut ind = 0;
-        let len = inp.len();
-        
-        for b in inp.bytes() {
-            if ind == len - 1 || b == b' ' {
-                if before_space <  ind {
-                    //let word = inp[before_space+1..ind].to_owned();
-                    unsafe{ws.update(Some(String::from(&inp[before_space..ind])))};
-                }
-                before_space = ind + 1;
-            }
-            ind += 1;
-        }
-    }
-
-//    fn split_bytes(inp : &Vec<u8>, ws : &mut fifo::WritableSlice<Option<String<20>>>) {
+//    fn split_string(inp : &std::string::String, ws : &mut fifo::WritableSlice<Option<String>>) {
 //        let mut before_space = 0;
 //        let mut ind = 0;
 //        let len = inp.len();
-//
-//        for b in inp {
-//            if (ind == len - 1 || b == &b' ')  {
-//                if before_space < ind  {
-//                    //unsafe{println!("{}",String::from_utf8_unchecked(Vec::from_iter(inp[before_space..ind].iter().cloned())));}
-//                    unsafe{ws.update(Some(String::from_utf8_unchecked(Vec::from_iter(inp[before_space..ind].iter().cloned()))))}
+//        
+//        for b in inp.bytes() {
+//            if ind == len - 1 || b == b' ' {
+//                if before_space <  ind {
+//                    //let word = inp[before_space+1..ind].to_owned();
+//                    unsafe{ws.update(Some(String::from(&inp[before_space..ind])))};
 //                }
 //                before_space = ind + 1;
-//            } 
+//            }
 //            ind += 1;
 //        }
 //    }
+
+    fn split_bytes(inp : Arc<Vec<u8>>, ws : &mut fifo::WritableSlice<Option<(Arc<Vec<u8>>, [usize; 2])>>) {
+        let mut before_space = 0;
+        let mut ind = 0;
+        let len = inp.len();
+
+        for b in inp.as_ref() {
+            if (ind == len - 1 || b == &b' ')  {
+                if before_space < ind  {
+                    //unsafe{println!("{}",String::from_utf8_unchecked(Vec::from_iter(inp[before_space..ind].iter().cloned())));}
+                    //unsafe{ws.update(Some(String::from(std::string::String::from_utf8_unchecked(Vec::from_iter(inp[before_space..ind].iter().cloned())))))}
+                    unsafe{ws.update(Some((inp.clone(), [before_space, ind])))}
+                }
+                before_space = ind + 1;
+            } 
+            ind += 1;
+        }
+    }
 }
 
 impl process::Process for SplitString {
@@ -88,7 +89,7 @@ impl process::Process for SplitString {
                     if ws.is_some() {
                         break;
                     }
-                    println!("HIHI ss");
+                    //println!("HIHI ss");
                 }
 
                 let mut wslice = ws.unwrap();
@@ -100,8 +101,8 @@ impl process::Process for SplitString {
                     }
                     match &slice.queue.buffer[ind] {
                         Some(line) => {
-                            SplitString::split_string(line, &mut wslice);
-                            //SplitString::split_bytes(line, &mut wslice);
+                            //SplitString::split_string(line, &mut wslice);
+                            SplitString::split_bytes(line.clone(), &mut wslice);
                             //unsafe{(*self.metrics).reserve_time.fetch_add(t1, std::sync::atomic::Ordering::SeqCst);}
                             total_words += 20;
                             //slice.queue.buffer[ind] = None;

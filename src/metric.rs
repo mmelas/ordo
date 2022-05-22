@@ -50,7 +50,7 @@ impl Metric {
 
     pub fn incr_hashtags(&self, amount : i64) {
         //println!("Hashtags num : {}", self.hashtags_read.load(Ordering::SeqCst) + amount);//456750000
-        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 456750000 { //put as many hashtags as the files contain
+        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 154857248 { //put as many hashtags as the files contain
             let total_time = self.start_time.elapsed();
             println!("Done reading all hashtags ({}).\n
                      total time : {:?}",

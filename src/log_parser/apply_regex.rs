@@ -14,8 +14,8 @@ const WEIGHT : f64 = 42.00000;
 
 pub struct AppRegex {
     id : usize,
-    pub inputs: *mut fifo::Queue<Option<String>>,
-    pub outputs: *mut fifo::Queue<Option<String>>,
+    pub inputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
+    pub outputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
     pub metrics: *mut Metrics<'static>
 }
 
@@ -25,8 +25,8 @@ unsafe impl Sync for AppRegex {}
 impl AppRegex {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<Option<String>>, 
-        outs : *mut fifo::Queue<Option<String>>, 
+        ins : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
+        outs : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
         metrics : *mut Metrics<'static>
     ) -> AppRegex {
         AppRegex {id : id, inputs : ins, outputs : outs, metrics: metrics}
@@ -64,7 +64,7 @@ impl process::Process for AppRegex {
                     }
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
-                            if word.as_bytes()[0] == b'#' {
+                            if word.0[word.1[0]] == b'a' {
                                 unsafe{wslice.update(Some(word.clone()))};
                                 total_words += 1;
                                 // make current entry as none in order

@@ -1,6 +1,6 @@
 use crate::process;
 use crate::fifo;
-use std::sync::{Mutex};
+use std::sync::{Arc, Mutex};
 use std::io::{self, BufRead, SeekFrom};
 use std::path::Path;
 use std::fs::File;
@@ -16,8 +16,8 @@ const WEIGHT : f64 = 1.20000;
 
 pub struct FileReader {
     id : usize,
-    pub inputs: *mut fifo::Queue<Option<String>>,
-    pub outputs: *mut fifo::Queue<Option<String>>,
+    pub inputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
+    pub outputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
     pub lines: Mutex<Vec<(io::BufReader<File>, u64)>>,
     metrics: *mut Metrics<'static>
 }
@@ -32,8 +32,8 @@ impl FileReader {
 
     pub fn new_with_vector(
         id : usize,
-        ins : *mut fifo::Queue<Option<String>>,
-        outs : *mut fifo::Queue<Option<String>>,
+        ins : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
+        outs : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
         files : Vec<String>,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -53,8 +53,8 @@ impl FileReader {
 
     pub fn new_with_single(
         id : usize,
-        ins : *mut fifo::Queue<Option<String>>,
-        outs : *mut fifo::Queue<Option<String>>,
+        ins : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
+        outs : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
         f_name : String, partitions : i64,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -140,9 +140,9 @@ impl process::Process for FileReader {
             current_pos += buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
             //current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
             //if total_lines % 4 == 0 {
-            let s = unsafe{String::from_utf8_unchecked(next_line)};
+            //let s = unsafe{String::from_utf8_unchecked(next_line)};
             //let ss = smartstring::alias::String::from(s);
-            unsafe{wslice.update(Some(s))}
+            unsafe{wslice.update(Some(Arc::new(next_line)))}
             //unsafe{wslice.update(Some(String::from_utf8_unchecked(next_line)))}
             //unsafe{wslice.update(Some(next_line))}
             //    next_line = String::new();

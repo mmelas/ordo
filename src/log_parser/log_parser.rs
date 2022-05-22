@@ -99,7 +99,7 @@ pub fn run() {
 
  //   let metrics_arc = Arc::new(metrics);
 //    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
-    let p1 = file_reader::FileReader::new_with_single(0, q, q, "../c_texts.txt".to_owned(), PRODUCERS, metrics);
+    let p1 = file_reader::FileReader::new_with_single(0, q, q, "../gutenberg/bigfile.txt".to_owned(), PRODUCERS, metrics);
 //    let metrics_c = metrics_arc.clone();
 //    let metrics_c2 = metrics_arc.clone();
 
