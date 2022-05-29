@@ -12,7 +12,7 @@ use std::time::Duration;
 // (operator) read a file and write to its (operator's)
 // output queue each line as a String
 
-const WEIGHT : f64 = 1.20000;
+const WEIGHT : f64 = 0.01000;
 
 pub struct FileReader {
     id : usize,
@@ -118,6 +118,7 @@ impl process::Process for FileReader {
 
         let mut ws;
         let mut t0 = std::time::Instant::now();
+        
         loop {
             ws = unsafe {
                 (*self.outputs).reserve(batch_size as usize)
@@ -137,7 +138,11 @@ impl process::Process for FileReader {
             let mut next_line = vec![];
            // let mut next_line = String::with_capacity(50);
             batch_size -= 1;
-            current_pos += buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
+            let mut bytes_read = 0;
+            while current_pos < upper_bound && bytes_read < 16_512 {
+                bytes_read += buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
+                current_pos += bytes_read;
+            }
             //current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
             //if total_lines % 4 == 0 {
             //let s = unsafe{String::from_utf8_unchecked(next_line)};
@@ -147,12 +152,12 @@ impl process::Process for FileReader {
             //unsafe{wslice.update(Some(next_line))}
             //    next_line = String::new();
            // }
-            total_lines += 1;
+            //total_lines += 1;
         } 
         t1 = t0.elapsed().as_nanos();
         unsafe{(*self.metrics).update_read_time(t1 as u64);}
 
-        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+        //unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
         //unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
 
         t0 = std::time::Instant::now();

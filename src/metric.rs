@@ -1,6 +1,7 @@
 use crate::metrics::Metrics;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};
+use atomic_float::AtomicF64;
 use std::cmp;
 use std::time::Instant;
 use crate::params;
@@ -18,19 +19,55 @@ pub struct Metric {
     pub start_time : Instant,
     pub hashtags_read : AtomicI64,
     pub total_amount_in : AtomicI64,
+    pub selectivity_arr : [AtomicF64; 5],
+    pub selectivity : AtomicF64,
+    pub select_cnt : AtomicI64,
+    pub safety_margin : f64, //TODO: use safety_margin and epsilon along with confidence interval for selectivity
+    pub epsilon : AtomicI64,
 }
 
 impl Metric {
     pub fn new(p_id : i64) -> Self {
         Metric {p_id : p_id, tick : AtomicI64::new(0), inp_throughput : AtomicI64::new(0), 
                 out_throughput : AtomicI64::new(0), items_read : AtomicI64::new(0), start_time : Instant::now(),
-                items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in : AtomicI64::new(0)}
+                items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in : AtomicI64::new(0),
+                selectivity_arr : [AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0)], 
+                selectivity : AtomicF64::new(1.0), select_cnt : AtomicI64::new(0), safety_margin : 0.1, epsilon : AtomicI64::new(0)}
     }
 
     pub fn update(&mut self, amount_in : i64, amount_out : i64) {
+        // only needed for last process, maybe remove after debugging no longer needed
+        // (when the call to this function is removed from the last process as well)
+        if amount_in == 0 {
+            return;
+        }
         let curr_tick = self.tick.fetch_sub(amount_in, Ordering::SeqCst) - amount_in;
         let items_read = self.items_read.fetch_add(amount_in, Ordering::SeqCst) + amount_in;
         let items_written = self.items_written.fetch_add(amount_out, Ordering::SeqCst) + amount_out;
+        let mut curr_select;
+        loop {
+            curr_select = self.select_cnt.load(Ordering::SeqCst);
+            if self.select_cnt.compare_exchange(
+                curr_select, (curr_select + 1) % 5, Ordering::SeqCst, Ordering::SeqCst
+            ).is_ok() {
+                break;
+            }
+        }
+        let prev_sel = self.selectivity_arr[curr_select as usize].load(Ordering::SeqCst);
+
+        self.selectivity.fetch_add((-prev_sel + (amount_out as f64 / amount_in as f64)) / 5.0, Ordering::SeqCst);
+        self.selectivity_arr[curr_select as usize].store(amount_out as f64 / amount_in as f64, Ordering::SeqCst);
+/*
+        if self.p_id == 1 {
+            //println!("{}", amount_out as f64/ amount_in as f64);
+            println!("{} {} {} {} {}", self.selectivity_arr[0].load(Ordering::SeqCst), self.selectivity_arr[1].load(Ordering::SeqCst),
+                      self.selectivity_arr[2].load(Ordering::SeqCst), self.selectivity_arr[3].load(Ordering::SeqCst), self.selectivity_arr[4].load(Ordering::SeqCst));
+        }
+*/
+
+//        if self.p_id == 2 {
+//            println!("{} {}", amount_out, amount_in);
+//        }
         self.total_amount_in.fetch_add(amount_in, Ordering::SeqCst);
         // period ticks passed, update inp_throughput
         if curr_tick <= 0 {

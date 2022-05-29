@@ -8,7 +8,7 @@ use smartstring::alias::String;
 // Operator that writes to the terminal everything that
 // comes into its input Queue
 
-const WEIGHT : f64 = 42.000000;
+const WEIGHT : f64 = 100.000000;
 
 pub struct Output {
     id : usize,
@@ -40,7 +40,7 @@ impl process::Process for Output {
     fn activate(&self, batch_size : i64) {
         let batch_size = (batch_size as f64 * WEIGHT) as i64;
         let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
-        let mut total_hashtags = 0;
+        let mut total_matches = 0;
         match rslice {
             Some(mut slice) => {
                 for i in 0..slice.len {
@@ -51,7 +51,7 @@ impl process::Process for Output {
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
                             if word.0[word.1[0]] == b'a' {
-                                total_hashtags += 1;
+                                total_matches += 1;
                             }
                             slice.queue.buffer[ind] = None;
                      //       slice.queue.fresh_val[ind] = false;
@@ -59,8 +59,11 @@ impl process::Process for Output {
                         None => {}
                     }
                 }
-                unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_hashtags)};
-                unsafe{(*self.metrics).proc_metrics[self.id].update(total_hashtags, total_hashtags)};
+                if slice.len == 0 {
+                    println!("HI");
+                }
+                unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_matches)};
+                unsafe{(*self.metrics).proc_metrics[self.id].update(total_matches, total_matches)};
                 slice.commit();
             },
             None => {}

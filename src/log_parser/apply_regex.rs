@@ -10,7 +10,7 @@ use smartstring::alias::String;
 // of applying a regex to everything that comes into its
 // input Queue
 
-const WEIGHT : f64 = 42.00000;
+const WEIGHT : f64 = 100.00000;
 
 pub struct AppRegex {
     id : usize,
@@ -81,6 +81,9 @@ impl process::Process for AppRegex {
                     println!("{} {}", slice.len, total_words);
                 }
                 //println!("{} {}", batch_size/4, total_words);
+                if slice.len == 0 {
+                    println!("HI");
+                }
                 unsafe{(*self.metrics).proc_metrics[self.id].update(slice.len as i64, total_words)};
                 unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_words)};
                 slice.commit();
