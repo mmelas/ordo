@@ -24,6 +24,8 @@ pub struct Metric {
     pub select_cnt : AtomicI64,
     pub safety_margin : f64, //TODO: use safety_margin and epsilon along with confidence interval for selectivity
     pub epsilon : AtomicI64,
+    pub extra_slices : AtomicI64,
+    pub total_extra_slices : AtomicI64,
 }
 
 impl Metric {
@@ -32,7 +34,7 @@ impl Metric {
                 out_throughput : AtomicI64::new(0), items_read : AtomicI64::new(0), start_time : Instant::now(),
                 items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in : AtomicI64::new(0),
                 selectivity_arr : [AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0)], 
-                selectivity : AtomicF64::new(1.0), select_cnt : AtomicI64::new(0), safety_margin : 0.1, epsilon : AtomicI64::new(0)}
+                selectivity : AtomicF64::new(100.0), select_cnt : AtomicI64::new(0), safety_margin : 0.1, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0)}
     }
 
     pub fn update(&mut self, amount_in : i64, amount_out : i64) {
@@ -83,6 +85,11 @@ impl Metric {
 
     pub fn incr_items(&self, amount : i64) {
         self.items_read.fetch_add(amount, Ordering::SeqCst);
+    }
+
+    pub fn update_extra_slices(&self, amount : i64) {
+        self.extra_slices.fetch_add(amount, Ordering::SeqCst);
+        self.total_extra_slices.fetch_add(amount, Ordering::SeqCst);
     }
 
     pub fn incr_hashtags(&self, amount : i64) {

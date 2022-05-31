@@ -48,7 +48,7 @@ impl SplitString {
 
     fn split_bytes(&self, inp : Arc<Vec<u8>>, mut selectivity : f64) -> i64 {
         //println!("{}", selectivity);
-        //selectivity += 1000.0;
+        selectivity += selectivity * 0.2;
         let mut before_space = 0;
         let mut ind = 0;
         let len = inp.len();
@@ -77,6 +77,7 @@ impl SplitString {
                             }
                             println!("HIHI ss");
                         }
+                        unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
                         wslice = ws.unwrap();
                     }
                     //unsafe{println!("{}",String::from_utf8_unchecked(Vec::from_iter(inp[before_space..ind].iter().cloned())));}
