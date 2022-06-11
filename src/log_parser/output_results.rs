@@ -3,12 +3,11 @@ use crate::fifo;
 use crate::params;
 use crate::metrics::Metrics;
 use std::sync::Arc;
-use smartstring::alias::String;
 
 // Operator that writes to the terminal everything that
 // comes into its input Queue
 
-const WEIGHT : f64 = 100.000000;
+const WEIGHT : f64 = (params::QUEUE_SIZE as usize) as f64;
 
 pub struct Output {
     id : usize,
@@ -33,7 +32,8 @@ impl Output {
 
 impl process::Process for Output {
     fn activation(&self) -> i64 {
-        unsafe{std::ptr::read_volatile(&(*self.inputs).readable_amount()) as i64}
+        //unsafe{std::ptr::read_volatile(&(*self.inputs).readable_amount()) as i64}
+       unsafe{params::QUEUE_SIZE as i64 - (*self.inputs).free_space() as i64}
         //unsafe{(*self.inputs).readable_amount() as i64}
     }    
 
@@ -66,7 +66,7 @@ impl process::Process for Output {
                 unsafe{(*self.metrics).proc_metrics[self.id].update(total_matches, total_matches)};
                 slice.commit();
             },
-            None => {}
+            None => {unsafe{(*self.metrics).proc_metrics[self.id].update_not_entered_cnt(1)};}
         }
     }
 }

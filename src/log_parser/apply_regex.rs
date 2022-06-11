@@ -2,15 +2,13 @@ use crate::process;
 use crate::fifo;
 use crate::params;
 use crate::metrics::Metrics;
-use regex::Regex;
 use std::sync::Arc;
-use smartstring::alias::String;
 
 // Operator that writes to its output queue the results
 // of applying a regex to everything that comes into its
 // input Queue
 
-const WEIGHT : f64 = 100.00000;
+const WEIGHT : f64 = 1.00000;
 
 pub struct AppRegex {
     id : usize,
@@ -36,27 +34,34 @@ impl AppRegex {
 impl process::Process for AppRegex {
     fn activation(&self) -> i64 {
         //println!("{}", unsafe{(*self.inputs).readable_amount() as i64});
-        unsafe{std::ptr::read_volatile(&(*self.inputs).readable_amount()) as i64}
+        //unsafe{std::ptr::read_volatile(&(*self.inputs).readable_amount()) as i64}
+       unsafe{params::QUEUE_SIZE as i64 - (*self.inputs).free_space() as i64}
         //unsafe{(*self.inputs).readable_amount() as i64}
     }    
 
     fn activate(&self, batch_size : i64) {
         let batch_size = (batch_size as f64 * WEIGHT) as i64;
         let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
+        let mut selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(std::sync::atomic::Ordering::SeqCst)};
+        selectivity += selectivity * 0.3 - 1.0;
 
+        //println!("{}", selectivity);
         match rslice {
             Some(mut slice) => {
                 let mut ws;
+                let reserve_slice = std::cmp::max((slice.len as f64 * selectivity) as usize, 1);
                 loop { 
-                    ws = unsafe{(*self.outputs).reserve(slice.len)};
+                    //println!("{} {} {} {}", batch_size, slice.len, selectivity, (slice.len as f64*selectivity) as usize);
+                    ws = unsafe{(*self.outputs).reserve(reserve_slice)};
                     if ws.is_some() {
                         break;
                     }
-                    println!("HIHI ap");
+                    println!("HIHI ap {}, {}, {}", reserve_slice, selectivity, slice.len);
                 }
                 let mut wslice = ws.unwrap();
 
-                let mut total_words = 0;
+                let mut total_matches = 0;
+                let mut words_read = 0;
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
                     if slice.queue.fresh_val[ind] == false {
@@ -64,11 +69,24 @@ impl process::Process for AppRegex {
                     }
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
+                            words_read += 1;
                             if word.0[word.1[0]] == b'a' {
+                                if wslice.curr_i == wslice.len {
+                                    unsafe{wslice.commit();}
+                                    loop {
+                                        ws = unsafe{(*self.outputs).reserve(reserve_slice)};
+                                        if ws.is_some() {
+                                            break;
+                                        }
+                                        println!("HIHI ap");
+                                    }
+                                    unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
+                                    wslice = ws.unwrap();
+                                }
                                 unsafe{wslice.update(Some(word.clone()))};
-                                total_words += 1;
                                 // make current entry as none in order
                                 // to not re-read it in the future 
+                                total_matches += 1;
                             }
                             //slice.queue.buffer[ind] = None;
                             //unsafe{std::ptr::write_volatile(&mut slice.queue.fresh_val[ind], false);}
@@ -77,19 +95,19 @@ impl process::Process for AppRegex {
                         None => {}
                     }
                 }
-                if slice.len < total_words as usize {
-                    println!("{} {}", slice.len, total_words);
+                if slice.len < total_matches as usize {
+                    println!("{} {}", words_read, total_matches);
                 }
-                //println!("{} {}", batch_size/4, total_words);
+                //println!("{} {}", batch_size/4, total_matches);
                 if slice.len == 0 {
                     println!("HI");
                 }
-                unsafe{(*self.metrics).proc_metrics[self.id].update(slice.len as i64, total_words)};
-                unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_words)};
+                unsafe{(*self.metrics).proc_metrics[self.id].update(words_read, total_matches)};
+                unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_matches)};
                 slice.commit();
                 unsafe{wslice.commit()};
             }, 
-            None => {}
+            None => {unsafe{(*self.metrics).proc_metrics[self.id].update_not_entered_cnt(1)};}
         }
     }
 }

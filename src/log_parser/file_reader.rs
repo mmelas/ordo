@@ -8,11 +8,12 @@ use std::{cmp, mem};
 use std::io::prelude::*;
 use crate::metrics::Metrics;
 use std::time::Duration;
+use crate::params;
 
 // (operator) read a file and write to its (operator's)
 // output queue each line as a String
 
-const WEIGHT : f64 = 0.01000;
+const WEIGHT : f64 = 0.10000;
 
 pub struct FileReader {
     id : usize,
@@ -78,6 +79,7 @@ impl FileReader {
             ); 
             prev_idx = upper_bound;
         }
+        lines.lock().unwrap().reverse();
         FileReader {id : id, inputs: ins, outputs: outs, lines: lines, metrics : metrics}
     }
 
@@ -106,7 +108,12 @@ impl process::Process for FileReader {
     }    
 
     fn activate(&self, mut batch_size : i64) {
-        batch_size = (batch_size as f64 * WEIGHT) as i64;
+        //if (batch_size == 300) {
+        //    batch_size = 40;
+        //}
+        //if batch_size == 300 {
+            //batch_size = (batch_size as f64 * WEIGHT) as i64;
+       // }
         let lines = self.lines.lock().unwrap().pop();
         let (mut buf_reader, upper_bound) = match lines {
             Some(x) => x,
@@ -121,6 +128,9 @@ impl process::Process for FileReader {
         
         loop {
             ws = unsafe {
+                if batch_size == 0 {
+                    //println!("ERROR : Batch Size is 0 on FileReader!");
+                }
                 (*self.outputs).reserve(batch_size as usize)
             };
             if ws.is_some() {
@@ -139,9 +149,10 @@ impl process::Process for FileReader {
            // let mut next_line = String::with_capacity(50);
             batch_size -= 1;
             let mut bytes_read = 0;
-            while current_pos < upper_bound && bytes_read < 16_512 {
-                bytes_read += buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
+            while current_pos < upper_bound && bytes_read < 64 {
+                bytes_read = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
                 current_pos += bytes_read;
+                total_lines += 1;
             }
             //current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
             //if total_lines % 4 == 0 {
@@ -152,12 +163,11 @@ impl process::Process for FileReader {
             //unsafe{wslice.update(Some(next_line))}
             //    next_line = String::new();
            // }
-            //total_lines += 1;
         } 
         t1 = t0.elapsed().as_nanos();
         unsafe{(*self.metrics).update_read_time(t1 as u64);}
 
-        //unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
         //unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
 
         t0 = std::time::Instant::now();

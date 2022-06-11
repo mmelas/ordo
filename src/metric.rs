@@ -1,6 +1,6 @@
 use crate::metrics::Metrics;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicI64, Ordering};
 use atomic_float::AtomicF64;
 use std::cmp;
 use std::time::Instant;
@@ -8,57 +8,68 @@ use crate::params;
 use std::sync::Arc;
  
 const PERIOD : i64 = params::PERIOD;
+const SELECTIVITY_ARR_LEN : usize = 20;
 
 pub struct Metric {
     pub p_id : i64,
     pub tick : AtomicI64,
-    pub inp_throughput : AtomicI64,
+    pub inp_throughput : AtomicF64,
     pub out_throughput : AtomicI64,
     pub items_read : AtomicI64,
     pub items_written : AtomicI64,
     pub start_time : Instant,
     pub hashtags_read : AtomicI64,
-    pub total_amount_in : AtomicI64,
-    pub selectivity_arr : [AtomicF64; 5],
+    pub total_amount_in_per_run : AtomicI64,
     pub selectivity : AtomicF64,
     pub select_cnt : AtomicI64,
     pub safety_margin : f64, //TODO: use safety_margin and epsilon along with confidence interval for selectivity
     pub epsilon : AtomicI64,
     pub extra_slices : AtomicI64,
     pub total_extra_slices : AtomicI64,
+    pub total_runs : AtomicI64,
+    pub not_entered_cnt : AtomicU64,
+    pub total_amount_in : AtomicF64,
+    pub total_amount_out : AtomicF64,
 }
 
 impl Metric {
     pub fn new(p_id : i64) -> Self {
-        Metric {p_id : p_id, tick : AtomicI64::new(0), inp_throughput : AtomicI64::new(0), 
+        Metric {p_id : p_id, tick : AtomicI64::new(0), inp_throughput : AtomicF64::new(0.0), 
                 out_throughput : AtomicI64::new(0), items_read : AtomicI64::new(0), start_time : Instant::now(),
-                items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in : AtomicI64::new(0),
-                selectivity_arr : [AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0), AtomicF64::new(0.0)], 
-                selectivity : AtomicF64::new(100.0), select_cnt : AtomicI64::new(0), safety_margin : 0.1, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0)}
+                items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in_per_run : AtomicI64::new(0),
+                selectivity : AtomicF64::new(100.0), select_cnt : AtomicI64::new(0), safety_margin : 0.3, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0), total_runs : AtomicI64::new(0), not_entered_cnt : AtomicU64::new(0), total_amount_in : AtomicF64::new(0.0), total_amount_out : AtomicF64::new(0.0)}
     }
 
     pub fn update(&mut self, amount_in : i64, amount_out : i64) {
-        // only needed for last process, maybe remove after debugging no longer needed
-        // (when the call to this function is removed from the last process as well)
+        // only needed for output process, maybe remove after debugging no longer needed
+        // (when the call to this function is removed from the output process as well)
         if amount_in == 0 {
             return;
         }
         let curr_tick = self.tick.fetch_sub(amount_in, Ordering::SeqCst) - amount_in;
         let items_read = self.items_read.fetch_add(amount_in, Ordering::SeqCst) + amount_in;
         let items_written = self.items_written.fetch_add(amount_out, Ordering::SeqCst) + amount_out;
-        let mut curr_select;
-        loop {
-            curr_select = self.select_cnt.load(Ordering::SeqCst);
-            if self.select_cnt.compare_exchange(
-                curr_select, (curr_select + 1) % 5, Ordering::SeqCst, Ordering::SeqCst
-            ).is_ok() {
-                break;
-            }
-        }
-        let prev_sel = self.selectivity_arr[curr_select as usize].load(Ordering::SeqCst);
+        self.total_runs.fetch_add(1, Ordering::SeqCst);
 
-        self.selectivity.fetch_add((-prev_sel + (amount_out as f64 / amount_in as f64)) / 5.0, Ordering::SeqCst);
-        self.selectivity_arr[curr_select as usize].store(amount_out as f64 / amount_in as f64, Ordering::SeqCst);
+        // Update selectivity only if it is not an outlier (it is within 20% of the average
+        // selectivity (of the last 20 items))
+        let curr_amount_in = self.total_amount_in.fetch_add(amount_in as f64, Ordering::SeqCst) + amount_in as f64;
+        let curr_amount_out = self.total_amount_out.fetch_add(amount_out as f64, Ordering::SeqCst) + amount_out as f64;
+        let mut curr_throughput = (curr_amount_out / curr_amount_in) as f64;
+        // In order to avoid overflows, whenever total throughput is higher than 100_000, simplify
+        // the fraction
+        if curr_throughput > 100000.0 {
+            self.total_amount_in.store(curr_throughput, Ordering::SeqCst);
+            self.total_amount_out.store(1.0, Ordering::SeqCst);
+        }
+        if curr_throughput == 0.0 {
+            curr_throughput = 1.0;
+        }
+        self.selectivity.store(curr_throughput, Ordering::SeqCst);
+        //if self.total_runs.load(Ordering::SeqCst) < 50 || (throughput < 1.2 * self.selectivity.load(Ordering::SeqCst) &&
+         //                                                  throughput > 0.8 * self.selectivity.load(Ordering::SeqCst)){
+            //println!("{}", throughput);
+        //}
 /*
         if self.p_id == 1 {
             //println!("{}", amount_out as f64/ amount_in as f64);
@@ -67,20 +78,17 @@ impl Metric {
         }
 */
 
-//        if self.p_id == 2 {
-//            println!("{} {}", amount_out, amount_in);
-//        }
-        self.total_amount_in.fetch_add(amount_in, Ordering::SeqCst);
+        self.total_amount_in_per_run.fetch_add(amount_in, Ordering::SeqCst);
         // period ticks passed, update inp_throughput
-        if curr_tick <= 0 {
+        //if curr_tick <= 0 {
             let total_ms = self.start_time.elapsed().as_millis() as i64;
-            let current_inp_throughput = items_read / cmp::max(1, total_ms);
+            let current_inp_throughput = items_read as f64 / cmp::max(1, total_ms) as f64;
             let current_out_throughput = items_written / cmp::max(1, total_ms);
             self.inp_throughput.store(current_inp_throughput, Ordering::SeqCst);
             self.out_throughput.store(current_out_throughput, Ordering::SeqCst);
             self.tick.store(PERIOD, Ordering::SeqCst);
         //    println!("Process : {} inp_throughput : {}, out_throughput : {} (items/ms)", self.p_id, current_inp_throughput, current_out_throughput);
-        }
+        //}
     }
 
     pub fn incr_items(&self, amount : i64) {
@@ -90,6 +98,10 @@ impl Metric {
     pub fn update_extra_slices(&self, amount : i64) {
         self.extra_slices.fetch_add(amount, Ordering::SeqCst);
         self.total_extra_slices.fetch_add(amount, Ordering::SeqCst);
+    }
+
+    pub fn update_not_entered_cnt(&mut self, t : u64) {
+        self.not_entered_cnt.fetch_add(t, Ordering::SeqCst);
     }
 
     pub fn incr_hashtags(&self, amount : i64) {
@@ -105,17 +117,17 @@ impl Metric {
     }
 }
 
-impl Ord for Metric {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.inp_throughput.load(Ordering::SeqCst).cmp(&other.inp_throughput.load(Ordering::SeqCst))
-    }
-}
-
-impl PartialOrd for Metric {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
+//impl Ord for Metric {
+//    fn cmp(&self, other: &Self) -> cmp::Ordering {
+//        self.inp_throughput.load(Ordering::SeqCst).cmp(&other.inp_throughput.load(Ordering::SeqCst))
+//    }
+//}
+//
+//impl PartialOrd for Metric {
+//    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+//        Some(self.cmp(other))
+//    }
+//}
 
 impl PartialEq for Metric {
     fn eq(&self, other: &Self) -> bool {

@@ -284,7 +284,9 @@ impl<T:Default> Queue<T> {
         // reservation count request
         let mut cur : usize;
 
-        if count == 0 { return None }
+        if count == 0 { 
+            return None 
+        }
         let mut tx_id : i64;
         loop {
             cur = self.shadow_tail.load(Ordering::SeqCst);

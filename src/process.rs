@@ -1,9 +1,10 @@
 use crate::params;
 use crate::metrics::Metrics;
-use rand::Rng;
-use rand::thread_rng;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::{Arc};
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
+const QUEUE_LIMIT : usize = params::QUEUE_LIMIT;
 
 pub trait Process : Send + Sync {
     fn activation(&self) -> i64;
@@ -36,18 +37,18 @@ impl ProcessRunner {
 //        self.thread_pool.execute(|| {
 //            self.processes[5].activate(WRITE_SLICE_S);
 //        });
-        let proc_cnt = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_cnt2 = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_cnt3 = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_cnt4 = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_act = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_act2 = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_act3 = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_act4 = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let proc_t = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let proc_t2 = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let proc_t3 = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let proc_t4 = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let proc_cnt = Arc::new(AtomicI64::new(0));
+        let proc_cnt2 = Arc::new(AtomicI64::new(0));
+        let proc_cnt3 = Arc::new(AtomicI64::new(0));
+        let proc_cnt4 = Arc::new(AtomicI64::new(0));
+        let proc_act = Arc::new(AtomicI64::new(0));
+        let proc_act2 = Arc::new(AtomicI64::new(0));
+        let proc_act3 = Arc::new(AtomicI64::new(0));
+        let proc_act4 = Arc::new(AtomicI64::new(0));
+        let proc_t = Arc::new(AtomicU64::new(0));
+        let proc_t2 = Arc::new(AtomicU64::new(0));
+        let proc_t3 = Arc::new(AtomicU64::new(0));
+        let proc_t4 = Arc::new(AtomicU64::new(0));
         for pi in 0..params::PRODUCERS {
             let proc_cnt = proc_cnt.clone();
             let proc_cnt2 = proc_cnt2.clone();
@@ -66,30 +67,59 @@ impl ProcessRunner {
                 let mut t0 = std::time::Instant::now();
                 loop {
                     let p = &self.processes[i];
-                    //println!("{} MPHKA {}", pi, i);
 //                    println!("pi {} : process {} activation {}", pi, i, p.activation());
-                    //println!("{}, {}", i, p.activation());
                     let d = p.activation();
                     unsafe{(*self.metrics).update_activation(d)};
                     if d > 0 {
-                        if i == 0 {proc_cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 1 {proc_cnt2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 2 {proc_cnt3.fetch_add(1, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 3 {proc_cnt4.fetch_add(1, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 0 {proc_act.fetch_add(d, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 1 && d < 360 {proc_act2.fetch_add(360 - d, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 2 && d < 7200 {proc_act3.fetch_add(7200 - d, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 3 && d < 15000 {proc_act4.fetch_add(15000 - d, std::sync::atomic::Ordering::SeqCst);}
+                        if i == 0 {proc_cnt.fetch_add(1, Ordering::SeqCst);}
+                        if i == 1 {proc_cnt2.fetch_add(1, Ordering::SeqCst);}
+                        if i == 2 {proc_cnt3.fetch_add(1, Ordering::SeqCst);}
+                        if i == 3 {proc_cnt4.fetch_add(1, Ordering::SeqCst);}
+                        if i == 0 {proc_act.fetch_add(d, Ordering::SeqCst);}
+                        if i == 1 && d < 360 {proc_act2.fetch_add(360 - d, Ordering::SeqCst);}
+                        if i == 2 && d < 7200 {proc_act3.fetch_add(7200 - d, Ordering::SeqCst);}
+                        if i == 3 && d < 15000 {proc_act4.fetch_add(15000 - d, Ordering::SeqCst);}
                         unsafe{(*self.metrics).update_process(i)};
+
+                        let mut ask_slice = WRITE_SLICE_S;
+                        //println!("MPHKA {}", i);
+                        if i != 3 {
+                            let next_process = &self.processes[i+1];
+                            let next_proc_queue_length = next_process.activation();
+                            let diff = QUEUE_LIMIT as i64 - next_proc_queue_length;
+                            if diff <= 0 {
+                                i += 1;
+                                i %= self.processes.len();
+                                continue;
+                            }
+                            let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[i].selectivity.load(Ordering::SeqCst)};
+                            ask_slice = std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1);
+                            //if i == 1 {
+                            //    println!("Asked slice {}", ask_slice);
+                            //}
+                            //if i == 0 {
+                                //println!("{} {} {} {}", pi, i, diff, curr_proc_selectivity);
+                            //println!("i : {} diff : {} selec : {} ask_slice : {}", i, diff, curr_proc_selectivity, ask_slice);
+                           // }
+                            //if ask_slice == 1 {
+                            //    println!("DJKFDSJLK i : {}, selec : {} diff : {}", i, curr_proc_selectivity, diff);
+                            //}
+                            
+                            //if i == 1{
+                            //    //println!("i : {}, ask_slice : {}, diff: {}, selectivity : {}, next_queue_len_capacity {}%", i, ask_slice, diff, curr_proc_selectivity, (next_proc_queue_length as f64 / params::QUEUE_SIZE as f64) * 100.0);
+                            //    println!("i : {}, ask_slice : {}, diff: {}, selectivity : {}, next_queue_len_capacity {}", i, ask_slice, diff, curr_proc_selectivity, next_proc_queue_length as f64);
+                            //}
+                        }
                         let t = std::time::Instant::now();
-                        p.activate(WRITE_SLICE_S);
+                        p.activate(ask_slice);
                         let t2 = t.elapsed().as_nanos() as u64;
 
-                        if i == 0 {proc_t.fetch_add(t2, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 1 {proc_t2.fetch_add(t2, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 2 {proc_t3.fetch_add(t2, std::sync::atomic::Ordering::SeqCst);}
-                        if i == 3 {proc_t4.fetch_add(t2, std::sync::atomic::Ordering::SeqCst);}
+                        if i == 0 {proc_t.fetch_add(t2, Ordering::SeqCst);}
+                        if i == 1 {proc_t2.fetch_add(t2, Ordering::SeqCst);}
+                        if i == 2 {proc_t3.fetch_add(t2, Ordering::SeqCst);}
+                        if i == 3 {proc_t4.fetch_add(t2, Ordering::SeqCst);}
                     } else {
+                        //unsafe{(*self.metrics).update_not_entered_cnt(1)};
                         //println!("{}", i);
                     }
                     //println!("{} BGHKA {}", pi, i);
@@ -97,79 +127,23 @@ impl ProcessRunner {
                     i %= self.processes.len();
                     if t0.elapsed() > std::time::Duration::from_millis(500) {
                         t0 = std::time::Instant::now();
-                        println!("0 : {} ({}) t{} 1 : {} ({}) t{} 2 : {} ({}) t{} 3 : {} ({}) t{}", proc_cnt.load(std::sync::atomic::Ordering::SeqCst), proc_act.load(std::sync::atomic::Ordering::SeqCst), proc_t.load(std::sync::atomic::Ordering::SeqCst)/1000000, proc_cnt2.load(std::sync::atomic::Ordering::SeqCst), proc_act2.load(std::sync::atomic::Ordering::SeqCst), proc_t2.load(std::sync::atomic::Ordering::SeqCst)/1000000, proc_cnt3.load(std::sync::atomic::Ordering::SeqCst), proc_act3.load(std::sync::atomic::Ordering::SeqCst), proc_t3.load(std::sync::atomic::Ordering::SeqCst)/1000000, proc_cnt4.load(std::sync::atomic::Ordering::SeqCst), proc_act4.load(std::sync::atomic::Ordering::SeqCst), proc_t4.load(std::sync::atomic::Ordering::SeqCst)/1000000);
-                        proc_cnt.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_cnt2.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_cnt3.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_cnt4.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_act.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_act2.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_act3.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_act4.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_t.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_t2.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_t3.store(0, std::sync::atomic::Ordering::SeqCst);
-                        proc_t4.store(0, std::sync::atomic::Ordering::SeqCst);
+                        println!("0 : {} ({}) t{} 1 : {} ({}) t{} 2 : {} ({}) t{} 3 : {} ({}) t{}", proc_cnt.load(Ordering::SeqCst), proc_act.load(Ordering::SeqCst), proc_t.load(Ordering::SeqCst)/1000000, proc_cnt2.load(Ordering::SeqCst), proc_act2.load(Ordering::SeqCst), proc_t2.load(Ordering::SeqCst)/1000000, proc_cnt3.load(Ordering::SeqCst), proc_act3.load(Ordering::SeqCst), proc_t3.load(Ordering::SeqCst)/1000000, proc_cnt4.load(Ordering::SeqCst), proc_act4.load(Ordering::SeqCst), proc_t4.load(Ordering::SeqCst)/1000000);
+                        proc_cnt.store(0, Ordering::SeqCst);
+                        proc_cnt2.store(0, Ordering::SeqCst);
+                        proc_cnt3.store(0, Ordering::SeqCst);
+                        proc_cnt4.store(0, Ordering::SeqCst);
+                        proc_act.store(0, Ordering::SeqCst);
+                        proc_act2.store(0, Ordering::SeqCst);
+                        proc_act3.store(0, Ordering::SeqCst);
+                        proc_act4.store(0, Ordering::SeqCst);
+                        proc_t.store(0, Ordering::SeqCst);
+                        proc_t2.store(0, Ordering::SeqCst);
+                        proc_t3.store(0, Ordering::SeqCst);
+                        proc_t4.store(0, Ordering::SeqCst);
                     }
                 }
             });
         }
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[0].activation() > 0 {
-//                    self.processes[0].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[1].activation() > 0 {
-//                    self.processes[1].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[1].activation() > 0 {
-//                    self.processes[1].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[1].activation() > 0 {
-//                    self.processes[1].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[2].activation() > 0 {
-//                    self.processes[2].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[2].activation() > 0 {
-//                    self.processes[2].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[3].activation() > 0 {
-//                    self.processes[3].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
-//        self.thread_pool.execute(|| {
-//            loop {
-//                if self.processes[3].activation() > 0 {
-//                    self.processes[3].activate(WRITE_SLICE_S);
-//                }
-//            }
-//        });
     }
     
     pub fn add_process(&mut self, proc : &'static mut dyn Process) {

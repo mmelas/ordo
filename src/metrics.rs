@@ -12,7 +12,6 @@ pub struct Metrics<'a> {
     pub items_read : AtomicI64,
     pub hashtags_read : AtomicI64,
     pub splits_time : Mutex<Duration>,
-    pub proc_throughput : Mutex<BinaryHeap<Metric>>,
     pub proc_metrics : Vec<&'a mut Metric>,
     pub activation : AtomicI64,
     pub prev_act : i64,
@@ -28,7 +27,6 @@ impl<'a> Default for Metrics<'a> {
             start_time : Instant::now(),
             items_read : AtomicI64::new(0),
             hashtags_read : AtomicI64::new(0),
-            proc_throughput : Mutex::new(BinaryHeap::new()),
             splits_time : Mutex::new(Duration::new(0, 0)),
             proc_metrics : vec![],
             activation : AtomicI64::new(0),
@@ -90,13 +88,14 @@ impl<'a> Metrics<'a> {
     pub fn print_metrics(&mut self) {
         let act = self.activation.load(Ordering::SeqCst);
         for metric in &self.proc_metrics {
-            println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in : {}, total_activation_amount : {}, total_reserve_time : {:?}, total_commit_time : {:?}, total_read_time : {:?}, 
-                     last extra required slices {}, total extra required slices {}",
+            println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in: {}, total_activation_amount : {}, total_reserve_time : {:?}, total_commit_time : {:?}, total_read_time : {:?}, 
+                     last extra required slices : {}, total extra required slices : {}, selectivity : {}, not_entered_cnt : {}",
                       metric.p_id, metric.inp_throughput.load(Ordering::SeqCst), metric.out_throughput.load(Ordering::SeqCst),
                       metric.total_amount_in.load(Ordering::SeqCst), act - self.prev_act, self.reserve_time.load(Ordering::SeqCst), 
                       self.commit_time.load(Ordering::SeqCst), self.read_time.load(Ordering::SeqCst),
-                      metric.extra_slices.load(Ordering::SeqCst), metric.total_extra_slices.load(Ordering::SeqCst));
+                      metric.extra_slices.load(Ordering::SeqCst), metric.total_extra_slices.load(Ordering::SeqCst), metric.selectivity.load(Ordering::SeqCst), metric.not_entered_cnt.load(Ordering::SeqCst));
             metric.extra_slices.store(0, Ordering::SeqCst);
+            metric.not_entered_cnt.store(0, Ordering::SeqCst);
             //(*self.process.lock().unwrap()).iter_mut().for_each(|x| println!("{}", x));
         }
         self.reserve_time.store(0, Ordering::SeqCst);
