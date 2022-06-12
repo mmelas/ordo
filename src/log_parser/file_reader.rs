@@ -1,6 +1,6 @@
 use crate::process;
 use crate::fifo;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::io::{self, BufRead, SeekFrom};
 use std::path::Path;
 use std::fs::File;
@@ -18,6 +18,7 @@ const WEIGHT : f64 = 0.10000;
 
 pub struct FileReader {
     id : usize,
+    target : RwLock<i64>,
     pub inputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
     pub outputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
     pub lines: Mutex<Vec<(io::BufReader<File>, u64)>>,
@@ -47,7 +48,7 @@ impl FileReader {
             buf_readers.push((buf_reader, file_size));
         } 
         FileReader {
-            id : id, inputs: ins, outputs: outs, 
+            id : id, target : RwLock::new(300), inputs: ins, outputs: outs, 
             lines: Mutex::new(buf_readers),
             metrics: metrics
         }
@@ -81,7 +82,7 @@ impl FileReader {
             prev_idx = upper_bound;
         }
         lines.lock().unwrap().reverse();
-        FileReader {id : id, inputs: ins, outputs: outs, lines: lines, metrics : metrics}
+        FileReader {id : id, target : RwLock::new(300), inputs: ins, outputs: outs, lines: lines, metrics : metrics}
     }
 
     fn get_next_br(mut f : File, os : i64) -> io::BufReader<File> {
@@ -110,13 +111,22 @@ impl process::Process for FileReader {
     
     fn boost(&self) -> i64 {
         //return 300;
-        let diff = std::cmp::max(params::QUEUE_LIMIT as i64 - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
-        let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
-        std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+       // let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
+       // let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
+       // std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+        self.get_target()
     }
 
     fn get_pid(&self) -> usize {
         self.id
+    }
+
+    fn set_target(&self, target : i64) {
+        *self.target.write().unwrap() = target;
+    }
+
+    fn get_target(&self) -> i64 {
+        *self.target.read().unwrap()
     }
 
     fn activate(&self, mut batch_size : i64) {
@@ -141,20 +151,19 @@ impl process::Process for FileReader {
         loop {
             ws = unsafe {
                 if batch_size == 0 {
-                    //println!("ERROR : Batch Size is 0 on FileReader!");
+                    println!("ERROR : Batch Size is 0 on FileReader!");
                 }
                 (*self.outputs).reserve(batch_size as usize)
             };
             if ws.is_some() {
                 break;
             }
-            println!("HIHI fr");
+            println!("HIHI fr, {}", self.get_target());
         }
         let mut t1 = t0.elapsed().as_nanos();
         unsafe{(*self.metrics).update_reserve_time(t1 as u64);}
         let mut wslice = ws.unwrap();
 
-        let mut total_lines = 0;
         t0 = std::time::Instant::now();
         let mut temp_batch_size = batch_size;
         while temp_batch_size > 0 && current_pos < upper_bound {
@@ -162,10 +171,10 @@ impl process::Process for FileReader {
            // let mut next_line = String::with_capacity(50);
             temp_batch_size -= 1;
             let mut bytes_read = 0;
-            while current_pos < upper_bound && bytes_read < 64 {
-                bytes_read = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
-                current_pos += bytes_read;
-                total_lines += 1;
+            while current_pos < upper_bound && bytes_read < 4096 {
+                let line_bytes = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
+                bytes_read += line_bytes;
+                current_pos += line_bytes;
             }
             //current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
             //if total_lines % 4 == 0 {

@@ -2,7 +2,7 @@ use crate::process;
 use crate::fifo;
 use crate::params;
 use crate::metrics::Metrics;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::Ordering;
 
 // Operator that writes to the terminal everything that
@@ -12,6 +12,7 @@ const WEIGHT : f64 = (params::QUEUE_SIZE as usize) as f64;
 
 pub struct Output {
     id : usize,
+    target : RwLock<i64>,
     pub inputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
     pub outputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
     pub metrics: *mut Metrics<'static>
@@ -27,7 +28,7 @@ impl Output {
         outs : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
         metrics: *mut Metrics<'static>
     ) -> Output {
-        Output {id : id, inputs: ins, outputs: outs, metrics: metrics}
+        Output {id : id, target : RwLock::new(params::TARGET_INIT), inputs: ins, outputs: outs, metrics: metrics}
     }
 }
 
@@ -39,15 +40,23 @@ impl process::Process for Output {
     }    
     
     fn boost(&self) -> i64 {
-        let diff = std::cmp::max(params::QUEUE_LIMIT as i64 - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
-        let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
-        std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+        //let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
+        //let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
+        //std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+        self.get_target()
     }
 
     fn get_pid(&self) -> usize {
         self.id
     }
 
+    fn set_target(&self, target : i64) {
+        *self.target.write().unwrap() = target;
+    }
+
+    fn get_target(&self) -> i64 {
+        *self.target.read().unwrap()
+    }
 
 
     fn activate(&self, batch_size : i64) {

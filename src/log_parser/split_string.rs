@@ -2,13 +2,14 @@ use crate::process;
 use crate::fifo;
 use crate::params;
 use crate::metrics::Metrics;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::Ordering;
 
 const WEIGHT : f64 = 1.000000;
 
 pub struct SplitString {
     id : usize,
+    target : RwLock<i64>,
     pub inputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
     pub outputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
     pub metrics : *mut Metrics<'static>
@@ -24,7 +25,7 @@ impl SplitString {
         outs : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
         metrics : *mut Metrics<'static>
     ) -> SplitString {
-        SplitString {id : id, inputs : ins, outputs : outs, metrics : metrics}
+        SplitString {id : id, target : RwLock::new(params::TARGET_INIT), inputs : ins, outputs : outs, metrics : metrics}
     }
 
     fn split_bytes(&self, inp : Arc<Vec<u8>>, mut selectivity : f64) -> i64 {
@@ -40,7 +41,7 @@ impl SplitString {
             if ws.is_some() {
                 break;
             }
-            //println!("HIHI ss {}", selectivity);
+            println!("HIHI ss {}", selectivity);
         }
 
         let mut wslice = ws.unwrap();
@@ -56,7 +57,7 @@ impl SplitString {
                             if ws.is_some() {
                                 break;
                             }
-                            //println!("HIHI ss_inner {}", selectivity);
+                            println!("HIHI ss_inner {}", selectivity);
                         }
                         unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
                         wslice = ws.unwrap();
@@ -86,13 +87,22 @@ impl process::Process for SplitString {
     }
     
     fn boost(&self) -> i64 {
-        let diff = std::cmp::max(params::QUEUE_LIMIT as i64 - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
-        let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
-        std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+        //let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
+        //let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
+        //std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+        self.get_target()
     }
 
     fn get_pid(&self) -> usize {
         self.id
+    }
+
+    fn set_target(&self, target : i64) {
+        *self.target.write().unwrap() = target;
+    }
+
+    fn get_target(&self) -> i64 {
+        *self.target.read().unwrap()
     }
 
     fn activate(&self, batch_size : i64) {

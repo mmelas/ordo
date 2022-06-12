@@ -4,7 +4,7 @@ use crate::log_parser::file_reader;
 use crate::log_parser::apply_regex;
 use crate::log_parser::output_results;
 use crate::log_parser::split_string;
-use crate::log_parser::clean_queue;
+//use crate::log_parser::clean_queue;
 use crate::metrics;
 use crate::metric::Metric;
 use std::sync::Arc;

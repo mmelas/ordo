@@ -15,6 +15,7 @@ const WEIGHT : f64 = 10000.00000;
 //and then maybe add atomicusize instead of usize (for more threads)
 pub struct CleanQueue<T> {
     id : usize,
+    target : i64,
     last_cleaned_ind : usize,
     pub inputs: *mut fifo::Queue<Option<T>>,
     pub outputs: *mut fifo::Queue<Option<T>>,
@@ -31,7 +32,7 @@ impl<T> CleanQueue<T> {
         outs : *mut fifo::Queue<Option<T>>, 
         metrics : *mut Metrics<'static>
     ) -> CleanQueue<T> {
-        CleanQueue {id : id, inputs : ins, outputs : outs, metrics: metrics, last_cleaned_ind : 0}
+        CleanQueue {id : id, target : params::TARGET_INIT, inputs : ins, outputs : outs, metrics: metrics, last_cleaned_ind : 0}
     }
 }
 
@@ -47,6 +48,10 @@ impl<T> process::Process for CleanQueue<T> {
 
     fn get_pid(&self) -> usize {
         self.id
+    }
+
+    fn set_target(&self, target : i64) {
+        self.target = target;
     }
 
     fn activate(&self, batch_size : i64) {
