@@ -128,13 +128,13 @@ impl Metric {
 //        Some(self.cmp(other))
 //    }
 //}
-
-impl PartialEq for Metric {
-    fn eq(&self, other: &Self) -> bool {
-        self.inp_throughput.load(Ordering::SeqCst) == other.inp_throughput.load(Ordering::SeqCst)
-    }
-}
-
-impl Eq for Metric {
-
-}
+//
+//impl PartialEq for Metric {
+//    fn eq(&self, other: &Self) -> bool {
+//        self.inp_throughput.load(Ordering::SeqCst) == other.inp_throughput.load(Ordering::SeqCst)
+//    }
+//}
+//
+//impl Eq for Metric {
+//
+//}

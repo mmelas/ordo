@@ -3,6 +3,8 @@ use crate::fifo;
 use crate::params;
 use crate::metrics::Metrics;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use std::cmp::max;
 
 // Operator that writes to its output queue the results
 // of applying a regex to everything that comes into its
@@ -38,6 +40,16 @@ impl process::Process for AppRegex {
        unsafe{params::QUEUE_SIZE as i64 - (*self.inputs).free_space() as i64}
         //unsafe{(*self.inputs).readable_amount() as i64}
     }    
+    
+    fn boost(&self) -> i64 {
+        let diff = max(params::QUEUE_LIMIT as i64 - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
+        let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
+        std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+    }
+
+    fn get_pid(&self) -> usize {
+        self.id
+    }
 
     fn activate(&self, batch_size : i64) {
         let batch_size = (batch_size as f64 * WEIGHT) as i64;

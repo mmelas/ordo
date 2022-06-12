@@ -3,6 +3,7 @@ use crate::fifo;
 use crate::params;
 use crate::metrics::Metrics;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 const WEIGHT : f64 = 1.000000;
 
@@ -39,7 +40,7 @@ impl SplitString {
             if ws.is_some() {
                 break;
             }
-            println!("HIHI ss {}", selectivity);
+            //println!("HIHI ss {}", selectivity);
         }
 
         let mut wslice = ws.unwrap();
@@ -55,7 +56,7 @@ impl SplitString {
                             if ws.is_some() {
                                 break;
                             }
-                            println!("HIHI ss_inner {}", selectivity);
+                            //println!("HIHI ss_inner {}", selectivity);
                         }
                         unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
                         wslice = ws.unwrap();
@@ -83,6 +84,16 @@ impl process::Process for SplitString {
        unsafe{params::QUEUE_SIZE as i64 - (*self.inputs).free_space() as i64}
 //        unsafe{std::ptr::read_volatile(&(*self.inputs).readable_amount()) as i64}
     }
+    
+    fn boost(&self) -> i64 {
+        let diff = std::cmp::max(params::QUEUE_LIMIT as i64 - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
+        let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
+        std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+    }
+
+    fn get_pid(&self) -> usize {
+        self.id
+    }
 
     fn activate(&self, batch_size : i64) {
         let batch_size = (batch_size as f64 * WEIGHT) as i64;
@@ -101,7 +112,7 @@ impl process::Process for SplitString {
                     }
                     match &slice.queue.buffer[ind] {
                         Some(line) => {
-                            let selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(std::sync::atomic::Ordering::SeqCst)};
+                            let selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
                             total_words += SplitString::split_bytes(self, line.clone(), selectivity);
                             //unsafe{(*self.metrics).reserve_time.fetch_add(t1, std::sync::atomic::Ordering::SeqCst);}
                             //slice.queue.buffer[ind] = None;

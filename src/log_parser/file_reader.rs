@@ -9,6 +9,7 @@ use std::io::prelude::*;
 use crate::metrics::Metrics;
 use std::time::Duration;
 use crate::params;
+use std::sync::atomic::Ordering;
 
 // (operator) read a file and write to its (operator's)
 // output queue each line as a String
@@ -106,6 +107,17 @@ impl process::Process for FileReader {
     fn activation(&self) -> i64 {
         return self.lines.lock().unwrap().len() as i64;
     }    
+    
+    fn boost(&self) -> i64 {
+        //return 300;
+        let diff = std::cmp::max(params::QUEUE_LIMIT as i64 - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
+        let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
+        std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
+    }
+
+    fn get_pid(&self) -> usize {
+        self.id
+    }
 
     fn activate(&self, mut batch_size : i64) {
         //if (batch_size == 300) {
@@ -144,10 +156,11 @@ impl process::Process for FileReader {
 
         let mut total_lines = 0;
         t0 = std::time::Instant::now();
-        while batch_size > 0 && current_pos < upper_bound {
+        let mut temp_batch_size = batch_size;
+        while temp_batch_size > 0 && current_pos < upper_bound {
             let mut next_line = vec![];
            // let mut next_line = String::with_capacity(50);
-            batch_size -= 1;
+            temp_batch_size -= 1;
             let mut bytes_read = 0;
             while current_pos < upper_bound && bytes_read < 64 {
                 bytes_read = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
@@ -167,7 +180,7 @@ impl process::Process for FileReader {
         t1 = t0.elapsed().as_nanos();
         unsafe{(*self.metrics).update_read_time(t1 as u64);}
 
-        unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
+        unsafe{(*self.metrics).proc_metrics[self.id].update(batch_size, batch_size)}
         //unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
 
         t0 = std::time::Instant::now();

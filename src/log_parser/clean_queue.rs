@@ -40,6 +40,14 @@ impl<T> process::Process for CleanQueue<T> {
         return 1;
         //unsafe{(*self.inputs).fresh_val[self.last_cleaned_ind] as i64}
     }    
+    
+    fn boost(&self) -> i64 {
+       unsafe{params::QUEUE_SIZE as i64 - (*self.inputs).free_space() as i64}
+    }
+
+    fn get_pid(&self) -> usize {
+        self.id
+    }
 
     fn activate(&self, batch_size : i64) {
         let mut last_cleaned_ind = 0;
