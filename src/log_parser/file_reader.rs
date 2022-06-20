@@ -171,7 +171,7 @@ impl process::Process for FileReader {
            // let mut next_line = String::with_capacity(50);
             temp_batch_size -= 1;
             let mut bytes_read = 0;
-            while current_pos < upper_bound && bytes_read < 4096 {
+            while current_pos < upper_bound && bytes_read < 16_384 {
                 let line_bytes = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
                 bytes_read += line_bytes;
                 current_pos += line_bytes;

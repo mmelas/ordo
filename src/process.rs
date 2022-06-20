@@ -99,12 +99,12 @@ impl ProcessRunner {
                 loop {
                     if pi == 0 && change_plan_t.elapsed() > std::time::Duration::from_millis(1_000) {
                         change_plan_t = std::time::Instant::now();
-                        let last_queue_limit = (70 * params::QUEUE_SIZE/100) as i64;
+                        let last_queue_limit = (100 * params::QUEUE_SIZE / 100) as i64;
                         let mut next_p = self.processes.len() - 1;
                         let mut curr_p = self.processes.len() - 2;
-                        let mut next_p_diff = last_queue_limit - self.processes[self.processes.len() - 1].activation();
-                        println!("{} {} {}", last_queue_limit,self.processes[self.processes.len() - 1].activation(), next_p_diff);
-                        //self.processes[next_p].set_target(last_queue_limit);
+                        let mut next_p_diff = last_queue_limit - self.processes[next_p].activation();
+                        println!("{} {} {}", last_queue_limit, self.processes[next_p].activation(), next_p_diff);
+                        self.processes[next_p].set_target(self.processes[next_p].activation());
                         while next_p > 1 {
                             let curr_p_items_req = ProcessRunner::eval_total_items_required(self, curr_p, next_p_diff);
                             next_p_diff = curr_p_items_req;
@@ -134,9 +134,13 @@ impl ProcessRunner {
                         continue;
                     }
                     let p = wrapped_p.unwrap();
+                    if p.get_pid() != 0 && p.get_pid() != 3 {
+                        //p.set_target(max(p.get_target() - 1, 1000000));
+                        p.set_target(10000);
+                    }
                     // put process back in the priority queue
                     self.ordered_procs.lock().unwrap().push(p);
-//                    println!("pi {} : process {} activation {}", pi, i, p.activation());
+                    //println!("pi {} : process {} target {}", pi, p.get_pid(), p.get_target());
                     let d = p.boost();
                     unsafe{(*self.metrics).update_activation(d)};
                     if p.boost() > 0 {
@@ -223,9 +227,9 @@ impl ProcessRunner {
         }
         let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[proc_id].selectivity.load(Ordering::SeqCst)};
         let read_items_req = next_p_diff as f64 / curr_proc_selectivity;
-        let items_req = min(max(read_items_req as i64 - self.processes[proc_id].activation(), 0), (70 * params::QUEUE_SIZE / 100) as i64) ; 
+        let items_req = min(max(read_items_req as i64 - self.processes[proc_id].activation(), 0), (100 * params::QUEUE_SIZE / 100) as i64) ; 
         //println!("p id {}, rir {}, items req {}, act {}", proc_id, read_items_req, items_req, self.processes[proc_id].activation() as usize);
-        return read_items_req as i64;
+        return items_req as i64;
     }
 
     pub fn add_process(&mut self, proc : &'static mut dyn Process) {
