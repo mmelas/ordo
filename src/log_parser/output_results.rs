@@ -35,15 +35,18 @@ impl Output {
 impl process::Process for Output {
     fn activation(&self) -> i64 {
         //unsafe{std::ptr::read_volatile(&(*self.inputs).readable_amount()) as i64}
-       unsafe{params::QUEUE_SIZE as i64 - (*self.inputs).free_space() as i64}
-        //unsafe{(*self.inputs).readable_amount() as i64}
+       //unsafe{params::QUEUE_SIZE as i64 - (*self.inputs).free_space() as i64}
+        unsafe{(*self.inputs).readable_amount() as i64}
     }    
     
-    fn boost(&self) -> i64 {
+    fn boost(&self) -> f64 {
         //let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
         //let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
         //std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
-        self.get_target()
+        if self.get_target() == 0 {
+            return 0.0;
+        }
+        self.activation() as f64 / (self.get_target()) as f64
     }
 
     fn get_pid(&self) -> usize {
