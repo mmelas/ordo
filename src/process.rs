@@ -8,7 +8,7 @@ use std::cmp::{min, max};
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 const TARGET_INIT : i64 = params::TARGET_INIT;
-const LAST_QUEUE_LIMIT : i64 = 7_000_000;
+const LAST_QUEUE_LIMIT : i64 = 10_000_000;
 
 pub trait Process : Send + Sync {
     fn activation(&self) -> i64;
@@ -101,7 +101,7 @@ impl ProcessRunner {
                     //if pi == 0 && change_plan_t.elapsed() > std::time::Duration::from_millis(3_000) {
                     //    reset_targets(self);
                     //}
-                    if pi == 0 && change_plan_t.elapsed() > std::time::Duration::from_millis(1_000) {
+                    if pi == 0 && change_plan_t.elapsed() > std::time::Duration::from_millis(500) {
                         change_plan_t = std::time::Instant::now();
                         //let LAST_QUEUE_LIMIT = (100 * params::QUEUE_SIZE / 100) as i64;
                         let mut next_p = self.processes.len() - 1;
@@ -148,7 +148,8 @@ impl ProcessRunner {
                     //println!("pi {} : process {} target {}", pi, p.get_pid(), p.get_target());
                     //let d = p.boost();
                     //unsafe{(*self.metrics).update_activation(d)};
-                    let ask_slice = p.get_target();
+                    let mut ask_slice = p.get_target();
+                    //ProcessRunner::print_process_priorities(self);
                     //ProcessRunner::print_process_priorities(self);
                     //println!("{} {} {} {} {}", p.get_pid(), ask_slice, p.boost(), p.activation(), p.get_target());
                     if ask_slice > 0 && p.boost() > 0.0 {
