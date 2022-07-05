@@ -8,11 +8,11 @@ use std::cmp::{min, max};
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 const TARGET_INIT : i64 = params::TARGET_INIT;
-const LAST_QUEUE_LIMIT : i64 = 10_000_000;
+const LAST_QUEUE_LIMIT : i64 = 1_000_000;
 
 pub trait Process : Send + Sync {
     fn activation(&self) -> i64;
-    fn boost(&self) -> f64;
+    fn boost(&self) -> i64;
     fn set_target(&self, target : i64);
     fn get_target(&self) -> i64;
     fn get_pid(&self) -> usize;
@@ -21,7 +21,7 @@ pub trait Process : Send + Sync {
 
 impl Ord for dyn Process {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.get_target().cmp(&(other.get_target()))
+        self.boost().cmp(&(other.boost()))
     }
 }
 
@@ -33,7 +33,7 @@ impl PartialOrd for dyn Process {
 
 impl PartialEq for dyn Process {
     fn eq(&self, other: &Self) -> bool {
-        self.get_target() == other.get_target()
+        self.boost() == other.boost()
     }
 }
 
@@ -106,13 +106,13 @@ impl ProcessRunner {
                         //let LAST_QUEUE_LIMIT = (100 * params::QUEUE_SIZE / 100) as i64;
                         let mut next_p = self.processes.len() - 1;
                         let mut curr_p = self.processes.len() - 2;
-                        let mut next_p_diff = LAST_QUEUE_LIMIT - self.processes[next_p].activation();
+                        let mut next_p_diff = max(LAST_QUEUE_LIMIT - self.processes[next_p].activation(), 0);
                         //println!("{} {} {}", LAST_QUEUE_LIMIT, self.processes[next_p].activation(), next_p_diff);
                         self.processes[next_p].set_target(next_p_diff);
                         while next_p > 0 {
                             let curr_p_items_req = ProcessRunner::eval_total_items_required(self, curr_p, next_p_diff);
+                            //println!("Process : {} requires : {} next_p_diff : {}", curr_p, curr_p_items_req, next_p_diff);
                             next_p_diff = curr_p_items_req;
-                            //println!("Process : {} requires : {}", curr_p, curr_p_items_req);
                             self.processes[curr_p].set_target(curr_p_items_req);
                             next_p -= 1;
                             curr_p -= 1;
@@ -122,37 +122,48 @@ impl ProcessRunner {
                         // we want to rearrange the processes
                         // ecause
                         {
-                            let mut _g_ordered_procs = self.ordered_procs.lock();
-                            let mut _g_ordered_procs_w = _g_ordered_procs.unwrap();
-                            for i in 0..self.processes.len() {
+                            let mut _g_ordered_procs_w = self.ordered_procs.lock().unwrap();
+                            //let mut _g_ordered_procs_w = _g_ordered_procs.unwrap();
+                            for _ in 0.._g_ordered_procs_w.len() {
                                 _g_ordered_procs_w.pop();
                             }
                             for i in 0..self.processes.len() {
                                 _g_ordered_procs_w.push(self.processes[i]);
                             }
                         }
+                        //ProcessRunner::print_process_priorities(self);
                     }
 
-                    let wrapped_p = self.ordered_procs.lock().unwrap().pop();
+                    //ProcessRunner::print_process_priorities(self);
+                    let mut wrapped = self.ordered_procs.lock().unwrap();
+                    let wrapped_p = wrapped.pop();
                     // all processes are being processed
                     if wrapped_p == None {
+                        drop(wrapped);
                         continue;
                     }
                     let p = wrapped_p.unwrap();
+                    //println!("{} {} {}", p.activation(), p.get_pid(), p.get_target());
+                    //if p.get_pid() == 2 {
+                    //    println!("{} {} {}", p.activation(), p.boost(), p.get_target());
+                    //}
                     //if p.get_pid() != 0 && p.get_pid() != 3 {
                     //    //p.set_target(max(p.get_target() - 1, 1000000));
                     //    p.set_target(10_000);
                     //}
                     // put process back in the priority queue
-                    self.ordered_procs.lock().unwrap().push(p);
+                    if p.get_pid() != 0 {
+                       // p.set_target();
+                    }
+                    wrapped.push(p);
+                    drop(wrapped);
                     //println!("pi {} : process {} target {}", pi, p.get_pid(), p.get_target());
                     //let d = p.boost();
                     //unsafe{(*self.metrics).update_activation(d)};
                     let mut ask_slice = p.get_target();
                     //ProcessRunner::print_process_priorities(self);
                     //ProcessRunner::print_process_priorities(self);
-                    //println!("{} {} {} {} {}", p.get_pid(), ask_slice, p.boost(), p.activation(), p.get_target());
-                    if ask_slice > 0 && p.boost() > 0.0 {
+                    if ask_slice > 0 && p.boost() > 0 {
                         if p.get_pid() == 0 {proc_cnt.fetch_add(1, Ordering::SeqCst);}
                         if p.get_pid() == 1 {proc_cnt2.fetch_add(1, Ordering::SeqCst);}
                         if p.get_pid() == 2 {proc_cnt3.fetch_add(1, Ordering::SeqCst);}
@@ -201,7 +212,7 @@ impl ProcessRunner {
                         if p.get_pid() == 2 {proc_t3.fetch_add(t2, Ordering::SeqCst);}
                         if p.get_pid() == 3 {proc_t4.fetch_add(t2, Ordering::SeqCst);}
                     } else {
-                        //unsafe{(*self.metrics).update_not_entered_cnt(1)};
+                        unsafe{(*self.metrics).proc_metrics[p.get_pid()].update_not_entered_cnt(1)};
                         //println!("{}", p.get_pid());
                     }
                     //println!("{} BGHKA {}", pi, i);
@@ -242,7 +253,7 @@ impl ProcessRunner {
             println!("proc : {} prio : {} act : {} target : {}", proc.get_pid(), proc.boost(), proc.activation(), proc.get_target());
             stack_procs.push(proc);
         }
-        println!("ooooooooooEND OF PRINT PROCSooooooooooo");
+        println!("ooooooooooEND OF PRINT PROCSooooooooooo, {}", stack_procs.len());
 
         for proc in stack_procs {
             _g_ordered_procs_w.push(proc);
@@ -271,6 +282,7 @@ impl ProcessRunner {
         }
         let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[proc_id].selectivity.load(Ordering::SeqCst)};
         let read_items_req = next_p_diff as f64 / curr_proc_selectivity;
+        //let items_req = min(read_items_req as i64, LAST_QUEUE_LIMIT); 
         let items_req = min(read_items_req as i64, LAST_QUEUE_LIMIT) ; 
         //println!("p id {}, rir {}, items req {}, act {}", proc_id, read_items_req, items_req, self.processes[proc_id].activation() as usize);
         return items_req as i64;

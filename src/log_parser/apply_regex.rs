@@ -42,14 +42,14 @@ impl process::Process for AppRegex {
         unsafe{(*self.inputs).readable_amount() as i64}
     }    
     
-    fn boost(&self) -> f64 {
+    fn boost(&self) -> i64 {
         //let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
         //let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
         //std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
         if self.get_target() == 0 {
-            return 0.0;
+            return 0;
         }
-        self.activation() as f64 / (self.get_target()) as f64
+        self.activation() * (*self.target.read().unwrap()) 
     }
 
     fn get_pid(&self) -> usize {
@@ -61,14 +61,18 @@ impl process::Process for AppRegex {
     }
 
     fn get_target(&self) -> i64 {
-        *self.target.read().unwrap()
+        let tar = *self.target.read().unwrap();
+        //if tar > 2000 {
+        //    return 2000;
+        //}
+        return tar;
     }
 
     fn activate(&self, batch_size : i64) {
         let batch_size = (batch_size as f64 * WEIGHT) as i64;
         let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
         let mut selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(std::sync::atomic::Ordering::SeqCst)};
-        selectivity += selectivity * 0.3 - 1.0;
+        selectivity += selectivity * 0.3;
 
         //println!("{}", selectivity);
         match rslice {

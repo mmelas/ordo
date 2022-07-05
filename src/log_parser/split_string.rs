@@ -41,7 +41,7 @@ impl SplitString {
             if ws.is_some() {
                 break;
             }
-            //println!("HIHI ss {}", selectivity);
+            println!("HIHI ss {}", selectivity);
         }
 
         let mut wslice = ws.unwrap();
@@ -57,7 +57,7 @@ impl SplitString {
                             if ws.is_some() {
                                 break;
                             }
-                            println!("HIHI ss_inner {}", selectivity);
+                            //println!("HIHI ss_inner {}", selectivity);
                         }
                         unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
                         wslice = ws.unwrap();
@@ -86,14 +86,14 @@ impl process::Process for SplitString {
         unsafe{std::ptr::read_volatile(&(*self.inputs).readable_amount()) as i64}
     }
     
-    fn boost(&self) -> f64 {
+    fn boost(&self) -> i64 {
         //let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
         //let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
         //std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
         if self.get_target() == 0 {
-            return 0.0;
+            return 0;
         }
-        self.activation() as f64 / (self.get_target()) as f64
+        self.activation() * (*self.target.read().unwrap())
     }
 
     fn get_pid(&self) -> usize {
@@ -105,7 +105,11 @@ impl process::Process for SplitString {
     }
 
     fn get_target(&self) -> i64 {
-        *self.target.read().unwrap()
+        let tar = *self.target.read().unwrap();
+        //if tar > 1000 {
+        //    return 1000;
+        //}
+        return tar;
     }
 
     fn activate(&self, batch_size : i64) {

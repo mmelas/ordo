@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::io::{self, BufRead, SeekFrom};
 use std::path::Path;
 use std::fs::File;
-use std::{cmp, mem};
 use std::io::prelude::*;
 use crate::metrics::Metrics;
 use std::time::Duration;
@@ -109,16 +108,21 @@ impl process::Process for FileReader {
         return self.lines.lock().unwrap().len() as i64;
     }    
     
-    fn boost(&self) -> f64 {
+    fn boost(&self) -> i64 {
         //return 300;
        // let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
        // let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
        // std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
         //f64::min(self.activation() as f64, self.get_target() as f64) / (self.get_target()) as f64
-        if self.get_target() == 0 {
-            return 0.0;
+        if self.activation() == 0 {
+            return 0;
+        } else {
+            return 30;
         }
-        self.activation() as f64 / (self.get_target()) as f64
+        //if self.get_target() == 0 {
+        //    return 0;
+        //}
+        //self.activation() / (*self.target.read().unwrap()) 
     }
 
     fn get_pid(&self) -> usize {
@@ -130,7 +134,14 @@ impl process::Process for FileReader {
     }
 
     fn get_target(&self) -> i64 {
-        *self.target.read().unwrap()
+        let tar = *self.target.read().unwrap();
+        if tar > 1000 {
+            return 1000;
+        }
+        if self.activation() == 0 {
+            return 0;
+        }
+        return tar;
     }
 
     fn activate(&self, mut batch_size : i64) {
