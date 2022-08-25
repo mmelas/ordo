@@ -114,11 +114,15 @@ impl process::Process for FileReader {
        // let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
        // std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
         //f64::min(self.activation() as f64, self.get_target() as f64) / (self.get_target()) as f64
-        if self.activation() == 0 {
+        //if self.activation() == 0 {
+        //    return 0;
+        //} else {
+        //    return 1;
+        //}
+        if self.get_target() == 0 {
             return 0;
-        } else {
-            return 30;
         }
+        self.activation() * *self.target.read().unwrap()
         //if self.get_target() == 0 {
         //    return 0;
         //}

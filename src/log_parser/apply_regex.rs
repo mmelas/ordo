@@ -49,7 +49,7 @@ impl process::Process for AppRegex {
         if self.get_target() == 0 {
             return 0;
         }
-        self.activation() * (*self.target.read().unwrap()) 
+        self.activation() * (*self.target.read().unwrap() + 3) 
     }
 
     fn get_pid(&self) -> usize {
@@ -65,7 +65,10 @@ impl process::Process for AppRegex {
         //if tar > 2000 {
         //    return 2000;
         //}
-        return tar;
+        if tar == 0 {
+            return self.activation();
+        }
+        return tar + 3;
     }
 
     fn activate(&self, batch_size : i64) {

@@ -57,7 +57,7 @@ impl SplitString {
                             if ws.is_some() {
                                 break;
                             }
-                            //println!("HIHI ss_inner {}", selectivity);
+                            println!("HIHI ss_inner {}", selectivity);
                         }
                         unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
                         wslice = ws.unwrap();
@@ -93,7 +93,7 @@ impl process::Process for SplitString {
         if self.get_target() == 0 {
             return 0;
         }
-        self.activation() * (*self.target.read().unwrap())
+        self.activation() * (*self.target.read().unwrap() + 2)
     }
 
     fn get_pid(&self) -> usize {
@@ -109,7 +109,10 @@ impl process::Process for SplitString {
         //if tar > 1000 {
         //    return 1000;
         //}
-        return tar;
+        if tar == 0 {
+            return self.activation();
+        }
+        return tar + 2;
     }
 
     fn activate(&self, batch_size : i64) {

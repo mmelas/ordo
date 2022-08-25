@@ -46,7 +46,7 @@ impl process::Process for Output {
         if self.get_target() == 0 {
             return 0;
         }
-        self.activation() * (*self.target.read().unwrap())
+        self.activation() * (*self.target.read().unwrap() + 4)
     }
 
     fn get_pid(&self) -> usize {
@@ -62,6 +62,9 @@ impl process::Process for Output {
         //if tar > 2000 {
         //    return 2000;
         //}
+        if tar == 0 {
+            return self.activation();
+        }
         return tar;
     }
 
