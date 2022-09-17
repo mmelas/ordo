@@ -86,7 +86,7 @@ impl FileReader {
 
     fn get_next_br(mut f : File, os : i64) -> io::BufReader<File> {
         let _ = f.seek(SeekFrom::Start(os as u64));
-        let mut br = io::BufReader::with_capacity(50_000, f);
+        let mut br = io::BufReader::with_capacity(60_000, f);
         let mut bytes = br.by_ref().bytes();
 
         loop { 
@@ -187,10 +187,9 @@ impl process::Process for FileReader {
         let mut temp_batch_size = batch_size;
         while temp_batch_size > 0 && current_pos < upper_bound {
             let mut next_line = vec![];
-           // let mut next_line = String::with_capacity(50);
             temp_batch_size -= 1;
             let mut bytes_read = 0;
-            while current_pos < upper_bound && bytes_read < 16_384 {
+            while current_pos < upper_bound && bytes_read < 32_768 {
                 let line_bytes = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
                 bytes_read += line_bytes;
                 current_pos += line_bytes;
@@ -206,15 +205,14 @@ impl process::Process for FileReader {
            // }
         } 
         t1 = t0.elapsed().as_nanos();
-        unsafe{(*self.metrics).update_read_time(t1 as u64);}
+        //unsafe{(*self.metrics).update_read_time(t1 as u64);}
 
         unsafe{(*self.metrics).proc_metrics[self.id].update(batch_size, batch_size)}
-        //unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_lines)}
 
         t0 = std::time::Instant::now();
         unsafe{wslice.commit()};
         t1 = t0.elapsed().as_nanos();
-        unsafe{(*self.metrics).update_commit_time(t1 as u64);}
+        //unsafe{(*self.metrics).update_commit_time(t1 as u64);}
 
         if buf_reader.seek(SeekFrom::Current(0)).unwrap() < upper_bound {
             self.lines.lock().unwrap().push((buf_reader, upper_bound));

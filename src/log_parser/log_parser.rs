@@ -8,10 +8,12 @@ use crate::log_parser::split_string;
 use crate::metrics;
 use crate::metric::Metric;
 use std::sync::Arc;
-use std::fs::File;
 use std::time::{Instant, Duration};
 use std::thread;
 use crate::params;
+use std::fs::OpenOptions;
+use std::sync::atomic::Ordering;
+use std::env;
 
 const PRODUCERS : i64 = params::PRODUCERS;
 
@@ -78,6 +80,9 @@ pub fn run() {
     let q2 = Box::leak(Box::new(fifo::Queue{..Default::default()}));
     let q3 = Box::leak(Box::new(fifo::Queue{..Default::default()}));
 
+    let args: Vec<String> = env::args().collect();
+    
+
     let f1 = "test0.txt".to_owned();
     let f2 = "test1.txt".to_owned();
     let f3 = "test2.txt".to_owned();
@@ -99,7 +104,7 @@ pub fn run() {
 
  //   let metrics_arc = Arc::new(metrics);
 //    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
-    let p1 = file_reader::FileReader::new_with_single(0, q, q, "../gutenberg/bigfile.txt".to_owned(), PRODUCERS, metrics);
+    let p1 = file_reader::FileReader::new_with_single(0, q, q, "/var/scratch/mmelas/bigfile.txt".to_owned(), PRODUCERS, metrics);
 //    let metrics_c = metrics_arc.clone();
 //    let metrics_c2 = metrics_arc.clone();
 
@@ -123,7 +128,8 @@ pub fn run() {
     pr.start();
 
     loop {
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(300));
+        (metrics.proc_metrics[3]).save_throughput();
         metrics.print_metrics();
     }
 }

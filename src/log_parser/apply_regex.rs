@@ -112,7 +112,7 @@ impl process::Process for AppRegex {
                                         }
                                         println!("HIHI ap");
                                     }
-                                    unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
+                                    //unsafe{(*self.metrics).proc_metrics[self.id].update_extra_slices(1);}
                                     wslice = ws.unwrap();
                                 }
                                 unsafe{wslice.update(Some(word.clone()))};
@@ -135,11 +135,11 @@ impl process::Process for AppRegex {
                     println!("HI");
                 }
                 unsafe{(*self.metrics).proc_metrics[self.id].update(words_read, total_matches)};
-                unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_matches)};
+                //unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_matches)};
                 slice.commit();
                 unsafe{wslice.commit()};
             }, 
-            None => {unsafe{(*self.metrics).proc_metrics[self.id].update_not_entered_cnt(1)};}
+            None => {/*unsafe{(*self.metrics).proc_metrics[self.id].update_not_entered_cnt(1)};*/}
         }
     }
 }

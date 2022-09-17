@@ -8,7 +8,7 @@ use std::cmp::{min, max};
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 const TARGET_INIT : i64 = params::TARGET_INIT;
-const LAST_QUEUE_LIMIT : i64 = 1_000_000;
+const LAST_QUEUE_LIMIT : i64 = 1_000_00;
 
 pub trait Process : Send + Sync {
     fn activation(&self) -> i64;
@@ -83,6 +83,7 @@ impl ProcessRunner {
         
         let mut change_plan_t= std::time::Instant::now();
         for pi in 0..params::PRODUCERS {
+
             let proc_cnt = proc_cnt.clone();
             let proc_cnt2 = proc_cnt2.clone();
             let proc_cnt3 = proc_cnt3.clone();
@@ -96,45 +97,42 @@ impl ProcessRunner {
             let proc_t3 = proc_t3.clone();
             let proc_t4 = proc_t4.clone();
             self.thread_pool.execute(move || {
+		    if pi == params::PRODUCERS - 1 {
+			while true {
+				if change_plan_t.elapsed() > std::time::Duration::from_millis(100) {
+					change_plan_t = std::time::Instant::now();
+					let mut next_p = self.processes.len() - 1;
+					let mut curr_p = self.processes.len() - 2;
+					let mut next_p_diff = max(LAST_QUEUE_LIMIT - self.processes[next_p].activation(), 0);
+					//println!("{} {} {}", LAST_QUEUE_LIMIT, self.processes[next_p].activation(), next_p_diff);
+					self.processes[next_p].set_target(next_p_diff);
+					while next_p > 0 {
+					    let curr_p_items_req = ProcessRunner::eval_total_items_required(self, curr_p, next_p_diff);
+					    //println!("Process : {} requires : {} next_p_diff : {}", curr_p, curr_p_items_req, next_p_diff);
+					    next_p_diff = curr_p_items_req;
+					    self.processes[curr_p].set_target(curr_p_items_req);
+					    next_p -= 1;
+					    curr_p -= 1;
+					}
+
+					// scope for the mutex guard
+					// we want to rearrange the processes
+					{
+					    let mut _g_ordered_procs_w = self.ordered_procs.lock().unwrap();
+					    //let mut _g_ordered_procs_w = _g_ordered_procs.unwrap();
+					    for _ in 0.._g_ordered_procs_w.len() {
+						_g_ordered_procs_w.pop();
+					    }
+					    for i in 0..self.processes.len() {
+						_g_ordered_procs_w.push(self.processes[i]);
+					    }
+					}
+					//ProcessRunner::print_process_priorities(self);
+				}
+			}
+		    }
                 let mut t0 = std::time::Instant::now();
                 loop {
-                    //if pi == 0 && change_plan_t.elapsed() > std::time::Duration::from_millis(3_000) {
-                    //    reset_targets(self);
-                    //}
-                    if pi == 0 && change_plan_t.elapsed() > std::time::Duration::from_millis(500) {
-                        change_plan_t = std::time::Instant::now();
-                        //let LAST_QUEUE_LIMIT = (100 * params::QUEUE_SIZE / 100) as i64;
-                        let mut next_p = self.processes.len() - 1;
-                        let mut curr_p = self.processes.len() - 2;
-                        let mut next_p_diff = max(LAST_QUEUE_LIMIT - self.processes[next_p].activation(), 0);
-                        //println!("{} {} {}", LAST_QUEUE_LIMIT, self.processes[next_p].activation(), next_p_diff);
-                        self.processes[next_p].set_target(next_p_diff);
-                        while next_p > 0 {
-                            let curr_p_items_req = ProcessRunner::eval_total_items_required(self, curr_p, next_p_diff);
-                            //println!("Process : {} requires : {} next_p_diff : {}", curr_p, curr_p_items_req, next_p_diff);
-                            next_p_diff = curr_p_items_req;
-                            self.processes[curr_p].set_target(curr_p_items_req);
-                            next_p -= 1;
-                            curr_p -= 1;
-                        }
-
-                        // scope for the mutex guard
-                        // we want to rearrange the processes
-                        // ecause
-                        {
-                            let mut _g_ordered_procs_w = self.ordered_procs.lock().unwrap();
-                            //let mut _g_ordered_procs_w = _g_ordered_procs.unwrap();
-                            for _ in 0.._g_ordered_procs_w.len() {
-                                _g_ordered_procs_w.pop();
-                            }
-                            for i in 0..self.processes.len() {
-                                _g_ordered_procs_w.push(self.processes[i]);
-                            }
-                        }
-                        //ProcessRunner::print_process_priorities(self);
-                    }
-
-                    //ProcessRunner::print_process_priorities(self);
                     let mut wrapped = self.ordered_procs.lock().unwrap();
                     let wrapped_p = wrapped.pop();
                     // all processes are being processed
@@ -143,66 +141,14 @@ impl ProcessRunner {
                         continue;
                     }
                     let p = wrapped_p.unwrap();
-                    //println!("{} {} {}", p.activation(), p.get_pid(), p.get_target());
-                    //if p.get_pid() == 2 {
-                    //    println!("{} {} {}", p.activation(), p.boost(), p.get_target());
-                    //}
-                    //if p.get_pid() != 0 && p.get_pid() != 3 {
-                    //    //p.set_target(max(p.get_target() - 1, 1000000));
-                    //    p.set_target(10_000);
-                    //}
-                    // put process back in the priority queue
-                    if p.get_pid() != 0 {
-                       // p.set_target();
-                    }
                     wrapped.push(p);
                     drop(wrapped);
-                    //println!("pi {} : process {} target {}", pi, p.get_pid(), p.get_target());
-                    //let d = p.boost();
-                    //unsafe{(*self.metrics).update_activation(d)};
-                    let mut ask_slice = p.get_target();
-                    //ProcessRunner::print_process_priorities(self);
-                    //ProcessRunner::print_process_priorities(self);
+                    let mut ask_slice = p.get_target();// / params::PRODUCERS;
                     if ask_slice > 0 && p.boost() > 0 {
                         if p.get_pid() == 0 {proc_cnt.fetch_add(1, Ordering::SeqCst);}
                         if p.get_pid() == 1 {proc_cnt2.fetch_add(1, Ordering::SeqCst);}
                         if p.get_pid() == 2 {proc_cnt3.fetch_add(1, Ordering::SeqCst);}
                         if p.get_pid() == 3 {proc_cnt4.fetch_add(1, Ordering::SeqCst);}
-                        //if p.get_pid() == 0 {proc_act.fetch_add(d, Ordering::SeqCst);}
-                        //if p.get_pid() == 1 && d < 360.0 {proc_act2.fetch_add(360 - , Ordering::SeqCst);}
-                        //if p.get_pid() == 2 && d < 7200.0 {proc_act3.fetch_add(7200 - d, Ordering::SeqCst);}
-                        //if p.get_pid() == 3 && d < 15000.0 {proc_act4.fetch_add(15000 - d, Ordering::SeqCst);}
-                        //unsafe{(*self.metrics).update_process(p.get_pid())};
-
-                        //let ask_slice = p.get_target();
-                        //println!("MPHKA {}", i);
-                       // if i != 3 {
-                       //     let next_process = &self.processes[i+1];
-                       //     let next_proc_queue_length = next_process.activation();
-                       //     let diff = TARGET_INIT as i64 - next_proc_queue_length;
-                       //     if diff <= 0 {
-                       //         i += 1;
-                       //         i %= self.processes.len();
-                       //         continue;
-                       //     }
-                       //     let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[i].selectivity.load(Ordering::SeqCst)};
-                       //     ask_slice = std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1);
-                       //     // if p.get_pid() == 1 {
-                       //     //    println!("Asked slice {}", ask_slice);
-                       //     //}
-                       //     // if p.get_pid() == 0 {
-                       //         //println!("{} {} {} {}", pi, i, diff, curr_proc_selectivity);
-                       //     //println!("i : {} diff : {} selec : {} ask_slice : {}", i, diff, curr_proc_selectivity, ask_slice);
-                       //    // }
-                       //     //if ask_slice == 1 {
-                       //     //    println!("DJKFDSJLK i : {}, selec : {} diff : {}", i, curr_proc_selectivity, diff);
-                       //     //}
-                       //     
-                       //     // if p.get_pid() == 1{
-                       //     //    //println!("i : {}, ask_slice : {}, diff: {}, selectivity : {}, next_queue_len_capacity {}%", i, ask_slice, diff, curr_proc_selectivity, (next_proc_queue_length as f64 / params::QUEUE_SIZE as f64) * 100.0);
-                       //     //    println!("i : {}, ask_slice : {}, diff: {}, selectivity : {}, next_queue_len_capacity {}", i, ask_slice, diff, curr_proc_selectivity, next_proc_queue_length as f64);
-                       //     //}
-                       // }
                         let t = std::time::Instant::now();
                         p.activate(ask_slice);
                         let t2 = t.elapsed().as_nanos() as u64;
@@ -220,7 +166,6 @@ impl ProcessRunner {
                     // put process back in the priority queue
                     //self.ordered_procs.lock().unwrap().push(p);
                     if t0.elapsed() > std::time::Duration::from_millis(500) {
-                        //ProcessRunner::print_process_priorities(self);
                         t0 = std::time::Instant::now();
                         //println!("0 : {} ({}) t{} 1 : {} ({}) t{} 2 : {} ({}) t{} 3 : {} ({}) t{}", proc_cnt.load(Ordering::SeqCst), proc_act.load(Ordering::SeqCst), proc_t.load(Ordering::SeqCst)/1000000, proc_cnt2.load(Ordering::SeqCst), proc_act2.load(Ordering::SeqCst), proc_t2.load(Ordering::SeqCst)/1000000, proc_cnt3.load(Ordering::SeqCst), proc_act3.load(Ordering::SeqCst), proc_t3.load(Ordering::SeqCst)/1000000, proc_cnt4.load(Ordering::SeqCst), proc_act4.load(Ordering::SeqCst), proc_t4.load(Ordering::SeqCst)/1000000);
                         proc_cnt.store(0, Ordering::SeqCst);

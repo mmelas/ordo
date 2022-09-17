@@ -6,8 +6,14 @@ use std::cmp;
 use std::time::Instant;
 use crate::params;
 use std::sync::Arc;
+use std::process;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::fmt;
+use std::env;
  
 const PERIOD : i64 = params::PERIOD;
+const PRODUCERS : i64 = params::PRODUCERS;
 const SELECTIVITY_ARR_LEN : usize = 20;
 
 pub struct Metric {
@@ -30,6 +36,7 @@ pub struct Metric {
     pub not_entered_cnt : AtomicU64,
     pub total_amount_in : AtomicF64,
     pub total_amount_out : AtomicF64,
+    pub output_throughput_array : Mutex<Vec<i64>>
 }
 
 impl Metric {
@@ -37,7 +44,7 @@ impl Metric {
         Metric {p_id : p_id, tick : AtomicI64::new(0), inp_throughput : AtomicF64::new(0.0), 
                 out_throughput : AtomicI64::new(0), items_read : AtomicI64::new(0), start_time : Instant::now(),
                 items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in_per_run : AtomicI64::new(0),
-                selectivity : AtomicF64::new(100.0), select_cnt : AtomicI64::new(0), safety_margin : 0.3, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0), total_runs : AtomicI64::new(0), not_entered_cnt : AtomicU64::new(0), total_amount_in : AtomicF64::new(0.0), total_amount_out : AtomicF64::new(0.0)}
+                selectivity : AtomicF64::new(100.0), select_cnt : AtomicI64::new(0), safety_margin : 0.3, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0), total_runs : AtomicI64::new(0), not_entered_cnt : AtomicU64::new(0), total_amount_in : AtomicF64::new(0.0), total_amount_out : AtomicF64::new(0.0), output_throughput_array : Mutex::new(Vec::new())}
     }
 
     pub fn update(&mut self, amount_in : i64, amount_out : i64) {
@@ -104,16 +111,78 @@ impl Metric {
         self.not_entered_cnt.fetch_add(t, Ordering::SeqCst);
     }
 
+    // RUNTIME 
+//    pub fn incr_hashtags(&self, amount : i64) {
+//        //println!("Hashtags num : {}", self.hashtags_read.load(Ordering::SeqCst) + amount);//456750000
+//        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 349019020 { //put as many hashtags as the files contain
+//            let total_time = self.start_time.elapsed();
+//            println!("Done reading all hashtags ({}).\n
+//                     total time : {:?}",
+//                     self.hashtags_read.load(Ordering::SeqCst),
+//                     total_time
+//                     );
+//        let mut file = OpenOptions::new().append(true).create(true).open("runtime.txt").expect("Unable to open file");
+//        let output_string = format!("Threads : {} running time : {:?}\n", PRODUCERS, total_time);
+//        file.write_all(output_string.as_bytes()).expect("write failed");
+//        println!("Data appended successfuly");
+//
+//	    process::exit(0);
+//        }    
+//    }
+
+    // THROUGHPUT
+//    pub fn incr_hashtags(&self, amount : i64) {
+//        //println!("Hashtags num : {}", self.hashtags_read.load(Ordering::SeqCst) + amount);//456750000
+//        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 349019020 { //put as many hashtags as the files contain
+//            let total_time = self.start_time.elapsed();
+//            println!("Done reading all hashtags ({}).\n
+//                     total time : {:?}",
+//                     self.hashtags_read.load(Ordering::SeqCst),
+//                     total_time
+//                     );
+//	let args: Vec<String> = env::args().collect();
+//	let file_name = format!("throughput{}.txt", args[1]);
+//        let mut file = OpenOptions::new().append(true).create(true).open(file_name).expect("Unable to open file");
+//        for val in &*self.output_throughput_array.lock().unwrap() {
+//            //file.write_all(val.()).expect("write failed");
+//	    write!(file, "Run : {}, throughput value : {}\n", params::RUN, &val);
+//        }
+//        println!("Data appended successfuly");
+//	    process::exit(0);
+//        }    
+//    }
+
+    // AVG THROUGHPUT && RUNTIME
     pub fn incr_hashtags(&self, amount : i64) {
         //println!("Hashtags num : {}", self.hashtags_read.load(Ordering::SeqCst) + amount);//456750000
-        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 154857248 { //put as many hashtags as the files contain
+        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 349019020 { //put as many hashtags as the files contain
             let total_time = self.start_time.elapsed();
             println!("Done reading all hashtags ({}).\n
                      total time : {:?}",
                      self.hashtags_read.load(Ordering::SeqCst),
                      total_time
-                     )
+                     );
+	let args: Vec<String> = env::args().collect();
+	let file_name = format!("both{}.txt", args[1]);
+        let mut file = OpenOptions::new().append(true).create(true).open(file_name).expect("Unable to open file");
+        let mut avg_throughput = 0;
+        let mut cnt = 0;
+        for val in &*self.output_throughput_array.lock().unwrap() {
+            avg_throughput += val;
+            cnt += 1;
+            //file.write_all(val.()).expect("write failed");
+        }
+        avg_throughput /= cnt;
+	    write!(file, "Run : {}, throughput avg : {}, runtime : {:?}\n", params::RUN, avg_throughput, total_time);
+        println!("Data appended successfuly");
+	    process::exit(0);
         }    
+    }
+
+
+
+    pub fn save_throughput(&self) {
+        (*(self.output_throughput_array.lock().unwrap())).push(self.out_throughput.load(Ordering::SeqCst));
     }
 }
 

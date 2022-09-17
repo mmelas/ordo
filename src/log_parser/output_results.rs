@@ -82,9 +82,7 @@ impl process::Process for Output {
                     //}
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
-                            if word.0[word.1[0]] == b'a' {
-                                total_matches += 1;
-                            }
+			    total_matches += 1;
                             slice.queue.buffer[ind] = None;
                      //       slice.queue.fresh_val[ind] = false;
                         },
