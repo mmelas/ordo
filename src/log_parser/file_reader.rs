@@ -135,7 +135,7 @@ impl process::Process for FileReader {
         return tar;
     }
 
-    fn activate(&self, mut batch_size : i64) {
+    fn activate(&self, mut batch_size : i64, thread_id : i64) {
         let lines = self.lines.lock().unwrap().pop();
         let (mut buf_reader, upper_bound) = match lines {
             Some(x) => x,
@@ -173,7 +173,7 @@ impl process::Process for FileReader {
             let mut next_line = vec![];
             temp_batch_size -= 1;
             let mut bytes_read = 0;
-            while current_pos < upper_bound && bytes_read < 32_768 {
+            while current_pos < upper_bound && bytes_read < 2048 {
                 let line_bytes = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
                 bytes_read += line_bytes;
                 current_pos += line_bytes;

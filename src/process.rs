@@ -8,7 +8,7 @@ use std::cmp::{min, max};
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 const TARGET_INIT : i64 = params::TARGET_INIT;
-const LAST_QUEUE_LIMIT : i64 = 5_00_000;
+const LAST_QUEUE_LIMIT : i64 = 5_0_000;
 
 pub trait Process : Send + Sync {
     fn activation(&self) -> i64;
@@ -16,7 +16,7 @@ pub trait Process : Send + Sync {
     fn set_target(&self, target : i64);
     fn get_target(&self) -> i64;
     fn get_pid(&self) -> usize;
-    fn activate(&self, batch_size : i64);
+    fn activate(&self, batch_size : i64, thread_id : i64);
 }
 
 impl Ord for dyn Process {
@@ -99,7 +99,7 @@ impl ProcessRunner {
             self.thread_pool.execute(move || {
 		    if pi == params::PRODUCERS - 1 {
 			while true {
-				if change_plan_t.elapsed() > std::time::Duration::from_millis(100) {
+				if change_plan_t.elapsed() > std::time::Duration::from_millis(10) {
 					change_plan_t = std::time::Instant::now();
 					let mut next_p = self.processes.len() - 1;
 					let mut curr_p = self.processes.len() - 2;
@@ -151,7 +151,7 @@ impl ProcessRunner {
                         if p.get_pid() == 2 {proc_cnt3.fetch_add(1, Ordering::SeqCst);}
                         if p.get_pid() == 3 {proc_cnt4.fetch_add(1, Ordering::SeqCst);}
                         let t = std::time::Instant::now();
-                        p.activate(ask_slice);
+                        p.activate(ask_slice, pi);
                         let t2 = t.elapsed().as_nanos() as u64;
 
                         if p.get_pid() == 0 {proc_t.fetch_add(t2, Ordering::SeqCst);}
@@ -160,7 +160,7 @@ impl ProcessRunner {
                         if p.get_pid() == 3 {proc_t4.fetch_add(t2, Ordering::SeqCst);}
                     } else {
                         unsafe{(*self.metrics).proc_metrics[p.get_pid()].update_not_entered_cnt(1)};
-                        //println!("{}", p.get_pid());
+                        //println!("not entered pid : {}, ask_slcie : {}, boost : {}", p.get_pid(), ask_slice, p.boost());
                     }
                     //println!("{} BGHKA {}", pi, i);
                     

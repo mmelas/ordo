@@ -4,6 +4,9 @@ use crate::params;
 use crate::metrics::Metrics;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::Ordering;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::io::BufWriter;
 
 // Operator that writes to the terminal everything that
 // comes into its input Queue
@@ -69,12 +72,15 @@ impl process::Process for Output {
     }
 
 
-    fn activate(&self, batch_size : i64) {
+    fn activate(&self, batch_size : i64, thread_id : i64) {
         //let batch_size = (batch_size as f64 * WEIGHT) as i64;
         let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
         let mut total_matches = 0;
         match rslice {
             Some(mut slice) => {
+		let file_name = format!("thread{}.txt", thread_id);
+		let mut file = OpenOptions::new().append(true).create(true).open(file_name).expect("Unable to open file");
+	        let mut f = BufWriter::with_capacity(600_000, file);
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
                     //if slice.queue.fresh_val[ind] == false {
@@ -83,13 +89,16 @@ impl process::Process for Output {
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
 			    total_matches += 1;
-			    println!("Word : {:?}", std::str::from_utf8(&word.0[word.1[0]..word.1[1]]));
+                            write!(f, "{}\n", String::from_utf8_lossy(&word.0[word.1[0]..word.1[1]-1]));
+
+			    //println!("Word : {:?}", std::str::from_utf8(&word.0[word.1[0]..word.1[1]]));
                             slice.queue.buffer[ind] = None;
                      //       slice.queue.fresh_val[ind] = false;
                         },
                         None => {}
                     }
                 }
+		f.flush();
                 if slice.len == 0 {
                     println!("HI");
                 }

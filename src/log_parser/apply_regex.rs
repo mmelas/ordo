@@ -71,7 +71,7 @@ impl process::Process for AppRegex {
         return tar + 3;
     }
 
-    fn activate(&self, batch_size : i64) {
+    fn activate(&self, batch_size : i64, thread_id : i64) {
         let batch_size = (batch_size as f64 * WEIGHT) as i64;
         let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
         let mut selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(std::sync::atomic::Ordering::SeqCst)};
