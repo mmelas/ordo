@@ -83,13 +83,42 @@ pub fn run() {
     let args: Vec<String> = env::args().collect();
     
 
-    let f1 = "test0.txt".to_owned();
-    let f2 = "test1.txt".to_owned();
-    let f3 = "test2.txt".to_owned();
-    let f4 = "test3.txt".to_owned();
-    let f5 = "test4.txt".to_owned();
-    let f6 = "test5.txt".to_owned();
-    let fds = vec![f1, f2, f3, f4, f5, f6];
+    let f1 = "/var/scratch/mmelas/xaa.txt".to_owned();
+    let f2 = "/var/scratch/mmelas/xab.txt".to_owned();
+    let f3 = "/var/scratch/mmelas/xac.txt".to_owned();
+    let f4 = "/var/scratch/mmelas/xad.txt".to_owned();
+    let f5 = "/var/scratch/mmelas/xae.txt".to_owned();
+    let f6 = "/var/scratch/mmelas/xaf.txt".to_owned();
+    let f7 = "/var/scratch/mmelas/xag.txt".to_owned();
+    let f8 = "/var/scratch/mmelas/xah.txt".to_owned();
+    let f9 = "/var/scratch/mmelas/xai.txt".to_owned();
+    let f10 = "/var/scratch/mmelas/xaj.txt".to_owned();
+    let f11 = "/var/scratch/mmelas/xak.txt".to_owned();
+    let f12 = "/var/scratch/mmelas/xal.txt".to_owned();
+    let f13 = "/var/scratch/mmelas/xam.txt".to_owned();
+    let f14 = "/var/scratch/mmelas/xan.txt".to_owned();
+    let f15 = "/var/scratch/mmelas/xao.txt".to_owned();
+    let f16 = "/var/scratch/mmelas/xap.txt".to_owned();
+    let f17 = "/var/scratch/mmelas/xaq.txt".to_owned();
+    let f18 = "/var/scratch/mmelas/xar.txt".to_owned();
+    let f19 = "/var/scratch/mmelas/xas.txt".to_owned();
+    let f20 = "/var/scratch/mmelas/xat.txt".to_owned();
+    let f21 = "/var/scratch/mmelas/xau.txt".to_owned();
+    let f22 = "/var/scratch/mmelas/xav.txt".to_owned();
+    let f23 = "/var/scratch/mmelas/xaw.txt".to_owned();
+    let f24 = "/var/scratch/mmelas/xax.txt".to_owned();
+    let f25 = "/var/scratch/mmelas/xay.txt".to_owned();
+    let f26 = "/var/scratch/mmelas/xaz.txt".to_owned();
+    let f27 = "/var/scratch/mmelas/xba.txt".to_owned();
+    let f28 = "/var/scratch/mmelas/xbb.txt".to_owned();
+    let f29 = "/var/scratch/mmelas/xbc.txt".to_owned();
+    let f30 = "/var/scratch/mmelas/xbd.txt".to_owned();
+    let f31 = "/var/scratch/mmelas/xbe.txt".to_owned();
+    let f322 = "/var/scratch/mmelas/xbf.txt".to_owned();
+    let f33 = "/var/scratch/mmelas/xbg.txt".to_owned();
+    let fds = vec![f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16,
+                   f17, f18, f19, f20, f21, f22, f23, f24, f25, f26, f27, f28, f29, f30,
+                   f31, f322, f33];
 
     let metrics = Box::leak(Box::new(metrics::Metrics{..Default::default()}));
 
@@ -103,8 +132,8 @@ pub fn run() {
     metrics.add_metric(m_3);
 
  //   let metrics_arc = Arc::new(metrics);
-//    let p1 = file_reader::FileReader::new_with_vector(q, q, fds);
-    let p1 = file_reader::FileReader::new_with_single(0, q, q, "/var/scratch/mmelas/bigfile.txt".to_owned(), PRODUCERS, metrics);
+    //let p1 = file_reader::FileReader::new_with_vector(0, q, q, fds, metrics);
+    let p1 = file_reader::FileReader::new_with_single(0, q, q, "/local/xaa".to_owned(), PRODUCERS, metrics);
 //    let metrics_c = metrics_arc.clone();
 //    let metrics_c2 = metrics_arc.clone();
 
