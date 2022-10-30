@@ -1,0 +1,4 @@
+Run : 81, throughput avg : 180, runtime : 51.69581131s
+Run : 81, throughput avg : 203, runtime : 29.04952056s
+Run : 81, throughput avg : 164, runtime : 25.981945471s
+Run : 81, throughput avg : 313, runtime : 28.428131428s
