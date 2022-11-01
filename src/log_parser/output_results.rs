@@ -83,7 +83,6 @@ impl process::Process for Output {
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
 			    total_matches += 1;
-			    println!("Word : {:?}", std::str::from_utf8(&word.0[word.1[0]..word.1[1]]));
                             slice.queue.buffer[ind] = None;
                      //       slice.queue.fresh_val[ind] = false;
                         },

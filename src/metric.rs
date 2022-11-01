@@ -133,7 +133,7 @@ impl Metric {
     // THROUGHPUT
 //    pub fn incr_hashtags(&self, amount : i64) {
 //        //println!("Hashtags num : {}", self.hashtags_read.load(Ordering::SeqCst) + amount);//456750000
-//        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 95044 { //put as many hashtags as the files contain
+//        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 349019020 { //put as many hashtags as the files contain
 //            let total_time = self.start_time.elapsed();
 //            println!("Done reading all hashtags ({}).\n
 //                     total time : {:?}",
@@ -155,7 +155,7 @@ impl Metric {
     // AVG THROUGHPUT && RUNTIME
     pub fn incr_hashtags(&self, amount : i64) {
         //println!("Hashtags num : {}", self.hashtags_read.load(Ordering::SeqCst) + amount);//456750000
-        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 10826894 { //put as many hashtags as the files contain
+        if self.hashtags_read.fetch_add(amount, Ordering::Relaxed) + amount == 349019020 { //put as many hashtags as the files contain
             let total_time = self.start_time.elapsed();
             println!("Done reading all hashtags ({}).\n
                      total time : {:?}",
@@ -173,12 +173,11 @@ impl Metric {
             //file.write_all(val.()).expect("write failed");
         }
         avg_throughput /= cnt;
-	    write!(file, "Run : {}, throughput avg : {}, runtime : {:?}\n", params::RUN, avg_throughput, total_time);
+	    write!(file, "Thread : {}, Run : {}, throughput avg : {}, runtime : {:?}\n", PRODUCERS, params::RUN, avg_throughput, total_time);
         println!("Data appended successfuly");
 	    process::exit(0);
         }    
     }
-
 
 
     pub fn save_throughput(&self) {
