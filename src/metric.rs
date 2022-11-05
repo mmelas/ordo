@@ -164,12 +164,15 @@ impl Metric {
                      );
 	let args: Vec<String> = env::args().collect();
 	let file_name = format!("/var/scratch/mmelas/both{}.txt", args[1]);
+	let file_name2 = format!("/var/scratch/mmelas/throughputs{}.txt", args[1]);
         let mut file = OpenOptions::new().append(true).create(true).open(file_name).expect("Unable to open file");
+        let mut file2 = OpenOptions::new().append(true).create(true).open(file_name2).expect("Unable to open file");
         let mut avg_throughput = 0;
         let mut cnt = 0;
         for val in &*self.output_throughput_array.lock().unwrap() {
             avg_throughput += val;
             cnt += 1;
+	    write!(file2, "Run : {}, throughput value : {}\n", params::RUN, &val);
             //file.write_all(val.()).expect("write failed");
         }
         avg_throughput /= cnt;
