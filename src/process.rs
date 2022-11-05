@@ -8,7 +8,7 @@ use std::cmp::{min, max};
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 const TARGET_INIT : i64 = params::TARGET_INIT;
-const LAST_QUEUE_LIMIT : i64 = 5_00_000;
+const LAST_QUEUE_LIMIT : i64 = 5_0_000;
 
 pub trait Process : Send + Sync {
     fn activation(&self) -> i64;

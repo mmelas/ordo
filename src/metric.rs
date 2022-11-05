@@ -163,7 +163,7 @@ impl Metric {
                      total_time
                      );
 	let args: Vec<String> = env::args().collect();
-	let file_name = format!("both{}.txt", args[1]);
+	let file_name = format!("/home/mmelas/Thesis/both{}.txt", args[1]);
         let mut file = OpenOptions::new().append(true).create(true).open(file_name).expect("Unable to open file");
         let mut avg_throughput = 0;
         let mut cnt = 0;
