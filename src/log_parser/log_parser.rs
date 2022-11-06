@@ -157,7 +157,7 @@ pub fn run() {
     pr.start();
 
     loop {
-        thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(500));
         (metrics.proc_metrics[3]).save_throughput();
         metrics.print_metrics();
     }
