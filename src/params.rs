@@ -1,4 +1,4 @@
-pub const PRODUCERS : i64 = 128;
+pub const PRODUCERS : i64 = 24;
 pub const CONSUMERS : i64 = 4;
 pub const NUM_ITEMS : usize = 1000000;
 pub const QUEUE_SIZE : usize = 50_000_000;
