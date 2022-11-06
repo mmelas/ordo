@@ -140,7 +140,6 @@ impl process::Process for FileReader {
         let (mut buf_reader, upper_bound) = match lines {
             Some(x) => x,
             None => {
-		println!("HEI");
 		return
 	    }
         };
