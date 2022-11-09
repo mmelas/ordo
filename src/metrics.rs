@@ -19,6 +19,8 @@ pub struct Metrics<'a> {
     pub reserve_time : AtomicU64,
     pub commit_time : AtomicU64,
     pub read_time : AtomicU64,
+    pub throughput_array : Mutex<Vec<u64>>,
+    pub read_items : AtomicU64,
 }
 
 impl<'a> Default for Metrics<'a> {
@@ -35,6 +37,8 @@ impl<'a> Default for Metrics<'a> {
             reserve_time : AtomicU64::new(0),
             commit_time : AtomicU64::new(0),
             read_time : AtomicU64::new(0),
+            read_items : AtomicU64::new(0),
+            throughput_array : Mutex::new(Vec::new()),
         }
     }
 }
@@ -68,6 +72,17 @@ impl<'a> Metrics<'a> {
     pub fn update_activation(&mut self, a : i64) {
         self.activation.fetch_add(a, Ordering::SeqCst);
     }
+    
+    pub fn update_read_items(&mut self, a : u64) {
+        self.read_items.fetch_add(a, Ordering::SeqCst);
+    }
+
+    pub fn save_throughput(&self) {
+        self.proc_metrics[3].save_throughput(self.read_items.load(Ordering::SeqCst)/ 500);
+       // (*(self.throughput_array.lock().unwrap())).push(self.read_items.load(Ordering::SeqCst) / 500);
+       // println!("System throughput : {}", self.read_items.load(Ordering::SeqCst)/500);
+        self.read_items.store(0, Ordering::SeqCst);
+    }
 
     pub fn update_process(&mut self, p : usize) {
         self.process.lock().unwrap()[p] += 1;
@@ -89,7 +104,7 @@ impl<'a> Metrics<'a> {
         let act = self.activation.load(Ordering::SeqCst);
         for metric in &self.proc_metrics {
             println!("process {} inp_throughput : {:?}, out_throughput : {:?} (items/ ms), total_amount_in: {}, total_activation_amount : {}, total_reserve_time : {:?}, total_commit_time : {:?}, total_read_time : {:?}, 
-                     last extra required slices : {}, total extra required slices : {}, selectivity : {}, not_entered_cnt : {}",
+                     last extra required slices : {}, total extra required slices : {}, selectivity : {}, not_entered_cnt : {}, ",
                       metric.p_id, metric.inp_throughput.load(Ordering::SeqCst), metric.out_throughput.load(Ordering::SeqCst),
                       metric.total_amount_in.load(Ordering::SeqCst), act - self.prev_act, self.reserve_time.load(Ordering::SeqCst), 
                       self.commit_time.load(Ordering::SeqCst), self.read_time.load(Ordering::SeqCst),

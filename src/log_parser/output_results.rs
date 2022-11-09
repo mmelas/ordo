@@ -73,6 +73,7 @@ impl process::Process for Output {
         //let batch_size = (batch_size as f64 * WEIGHT) as i64;
         let rslice = unsafe{(*self.inputs).dequeue_multiple(batch_size)};
         let mut total_matches = 0;
+        let mut total_bytes = 0;
         match rslice {
             Some(mut slice) => {
                 for i in 0..slice.len {

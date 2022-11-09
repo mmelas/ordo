@@ -86,7 +86,7 @@ impl FileReader {
 
     fn get_next_br(mut f : File, os : i64) -> io::BufReader<File> {
         let _ = f.seek(SeekFrom::Start(os as u64));
-        let mut br = io::BufReader::with_capacity(60_000, f);
+        let mut br = io::BufReader::with_capacity(600_000, f);
         let mut bytes = br.by_ref().bytes();
 
         loop { 
@@ -109,24 +109,11 @@ impl process::Process for FileReader {
     }    
     
     fn boost(&self) -> i64 {
-        //return 300;
-       // let diff = std::cmp::max(*self.target.read().unwrap() - (unsafe{params::QUEUE_SIZE as i64 - (*self.outputs).free_space() as i64}), 0);
-       // let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
-       // std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
-        //f64::min(self.activation() as f64, self.get_target() as f64) / (self.get_target()) as f64
-        //if self.activation() == 0 {
-        //    return 0;
-        //} else {
-        //    return 1;
-        //}
+        //return 9999999999999;
         if self.get_target() == 0 {
             return 0;
         }
         self.activation() * *self.target.read().unwrap()
-        //if self.get_target() == 0 {
-        //    return 0;
-        //}
-        //self.activation() / (*self.target.read().unwrap()) 
     }
 
     fn get_pid(&self) -> usize {
@@ -149,16 +136,13 @@ impl process::Process for FileReader {
     }
 
     fn activate(&self, mut batch_size : i64) {
-        //if (batch_size == 300) {
-        //    batch_size = 40;
-        //}
-        //if batch_size == 300 {
-            //batch_size = (batch_size as f64 * WEIGHT) as i64;
-       // }
         let lines = self.lines.lock().unwrap().pop();
         let (mut buf_reader, upper_bound) = match lines {
             Some(x) => x,
-            None => return
+            None => {
+		println!("HEI");
+		return
+	    }
         };
 
         // Read lines of current bufreader
@@ -185,27 +169,21 @@ impl process::Process for FileReader {
 
         t0 = std::time::Instant::now();
         let mut temp_batch_size = batch_size;
+        let mut total_bytes_read = 0;
         while temp_batch_size > 0 && current_pos < upper_bound {
             let mut next_line = vec![];
             temp_batch_size -= 1;
             let mut bytes_read = 0;
             while current_pos < upper_bound && bytes_read < 32_768 {
                 let line_bytes = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
+                total_bytes_read += line_bytes;
                 bytes_read += line_bytes;
                 current_pos += line_bytes;
             }
-            //current_pos += buf_reader.read_line(&mut next_line).unwrap() as u64;
-            //if total_lines % 4 == 0 {
-            //let s = unsafe{String::from_utf8_unchecked(next_line)};
-            //let ss = smartstring::alias::String::from(s);
             unsafe{wslice.update(Some(Arc::new(next_line)))}
-            //unsafe{wslice.update(Some(String::from_utf8_unchecked(next_line)))}
-            //unsafe{wslice.update(Some(next_line))}
-            //    next_line = String::new();
-           // }
         } 
         t1 = t0.elapsed().as_nanos();
-        //unsafe{(*self.metrics).update_read_time(t1 as u64);}
+        unsafe{(*self.metrics).update_read_items(total_bytes_read);}
 
         unsafe{(*self.metrics).proc_metrics[self.id].update(batch_size, batch_size)}
 

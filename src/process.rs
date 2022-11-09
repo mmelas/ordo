@@ -8,7 +8,7 @@ use std::cmp::{min, max};
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 const TARGET_INIT : i64 = params::TARGET_INIT;
-const LAST_QUEUE_LIMIT : i64 = 1_000_00;
+const LAST_QUEUE_LIMIT : i64 = 1_00_000;
 
 pub trait Process : Send + Sync {
     fn activation(&self) -> i64;
@@ -135,6 +135,7 @@ impl ProcessRunner {
                 loop {
                     let mut wrapped = self.ordered_procs.lock().unwrap();
                     let wrapped_p = wrapped.pop();
+
                     // all processes are being processed
                     if wrapped_p == None {
                         drop(wrapped);
