@@ -44,8 +44,10 @@ impl process::Process for Output {
         //let curr_proc_selectivity = unsafe{(*self.metrics).proc_metrics[self.id].selectivity.load(Ordering::SeqCst)};
         //std::cmp::max((diff as f64 / curr_proc_selectivity as f64) as i64, 1)
         if self.get_target() == 0 {
-            return 0;
+		return std::i64::MAX;
+            //return 0;
         }
+	//self.activation()
         self.activation() * (*self.target.read().unwrap() + 4)
     }
 

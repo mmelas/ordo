@@ -126,7 +126,7 @@ impl process::Process for FileReader {
 
     fn get_target(&self) -> i64 {
         let tar = *self.target.read().unwrap();
-        if tar > 1000 {
+        if tar > 2000 {
             return 1000;
         }
         if self.activation() == 0 {
@@ -140,7 +140,6 @@ impl process::Process for FileReader {
         let (mut buf_reader, upper_bound) = match lines {
             Some(x) => x,
             None => {
-		println!("HEI");
 		return
 	    }
         };
