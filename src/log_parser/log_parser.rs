@@ -133,7 +133,7 @@ pub fn run() {
 
  //   let metrics_arc = Arc::new(metrics);
     //let p1 = file_reader::FileReader::new_with_vector(0, q, q, fds, metrics);
-    let p1 = file_reader::FileReader::new_with_single(0, q, q, "/local/bigfile.txt".to_owned(), PRODUCERS, metrics);
+    let p1 = file_reader::FileReader::new_with_single(0, q, q, "/var/scratch/mmelas/bigfile.txt".to_owned(), PRODUCERS, metrics);
 //    let metrics_c = metrics_arc.clone();
 //    let metrics_c2 = metrics_arc.clone();
 
@@ -156,9 +156,16 @@ pub fn run() {
 //    pr.add_process(Box::leak(Box::new(p6)));
     pr.start();
 
+    let mut start_t = std::time::Instant::now();
     loop {
+        println!("HEYHEY");
         thread::sleep(Duration::from_millis(500));
         (metrics.proc_metrics[3]).save_throughput();
         metrics.print_metrics();
+        if start_t.elapsed().as_secs() >= 5
+        {
+           // pr.resize_thread_pool();
+            start_t = std::time::Instant::now();
+        }
     }
 }

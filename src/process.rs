@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::collections::BinaryHeap;
 use std::cmp::{min, max};
+use std::time::Instant;
 
 const WRITE_SLICE_S : i64 = params::WRITE_SLICE_S as i64;
 const TARGET_INIT : i64 = params::TARGET_INIT;
@@ -76,14 +77,16 @@ impl ProcessRunner {
         let proc_t2 = Arc::new(AtomicU64::new(0));
         let proc_t3 = Arc::new(AtomicU64::new(0));
         let proc_t4 = Arc::new(AtomicU64::new(0));
+        let next_time = Arc::new(Mutex::new(std::time::Duration::from_millis(500)));
 
         for i in 0..self.processes.len() {
             self.ordered_procs.lock().unwrap().push(self.processes[i]); 
         }
         
         let mut change_plan_t= std::time::Instant::now();
-        for pi in 0..params::PRODUCERS {
 
+        let mut pi = 0;
+        loop {
             let proc_cnt = proc_cnt.clone();
             let proc_cnt2 = proc_cnt2.clone();
             let proc_cnt3 = proc_cnt3.clone();
@@ -96,18 +99,20 @@ impl ProcessRunner {
             let proc_t2 = proc_t2.clone();
             let proc_t3 = proc_t3.clone();
             let proc_t4 = proc_t4.clone();
+            let next_time = next_time.clone();
             self.thread_pool.execute(move || {
 		    if pi == params::PRODUCERS - 1 {
-			while true {
-				if change_plan_t.elapsed() > std::time::Duration::from_millis(100) {
+				if change_plan_t.elapsed() > *next_time.lock().unwrap() {
 					change_plan_t = std::time::Instant::now();
 					let mut next_p = self.processes.len() - 1;
 					let mut curr_p = self.processes.len() - 2;
+                    let mut curr_time = *next_time.lock().unwrap();
+                    *next_time.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_millis(500)).unwrap();
 					let mut next_p_diff = max(LAST_QUEUE_LIMIT - self.processes[next_p].activation(), 0);
 					//println!("{} {} {}", LAST_QUEUE_LIMIT, self.processes[next_p].activation(), next_p_diff);
 					self.processes[next_p].set_target(next_p_diff);
 					while next_p > 0 {
-					    let curr_p_items_req = ProcessRunner::eval_total_items_required(self, curr_p, next_p_diff);
+					    let curr_p_items_req = ProcessRunner::eval_total_items_required(&self, curr_p, next_p_diff);
 					    //println!("Process : {} requires : {} next_p_diff : {}", curr_p, curr_p_items_req, next_p_diff);
 					    next_p_diff = curr_p_items_req;
 					    self.processes[curr_p].set_target(curr_p_items_req);
@@ -128,18 +133,18 @@ impl ProcessRunner {
 					    }
 					}
 					//ProcessRunner::print_process_priorities(self);
+                    unsafe{(*self.metrics).proc_metrics[3].save_throughput();}
+                    unsafe{(*self.metrics).print_metrics();}
 				}
-			}
 		    }
-                let mut t0 = std::time::Instant::now();
-                loop {
+                let mut t0 = Instant::now();
                     let mut wrapped = self.ordered_procs.lock().unwrap();
                     let wrapped_p = wrapped.pop();
 
                     // all processes are being processed
                     if wrapped_p == None {
                         drop(wrapped);
-                        continue;
+                        return;
                     }
                     let p = wrapped_p.unwrap();
                     wrapped.push(p);
@@ -182,11 +187,19 @@ impl ProcessRunner {
                         proc_t3.store(0, Ordering::SeqCst);
                         proc_t4.store(0, Ordering::SeqCst);
                     }
-                }
-            });
+                    let mut t0 = std::time::Instant::now();
+                });
+                pi += 1;
+                pi %= params::PRODUCERS;
+                //println!("pi : {}", pi);
+            }
         }
-    }
     
+    pub fn resize_thread_pool(&mut self) {
+        println!("thread pool size before : {}", self.thread_pool.active_count());
+       self.thread_pool.set_num_threads(max(self.thread_pool.active_count() - 10, params::PRODUCERS as usize / 2));
+        println!("thread pool size after : {}", self.thread_pool.active_count());
+    }
 
     fn print_process_priorities(&self) {
         let mut _g_ordered_procs = self.ordered_procs.lock();
