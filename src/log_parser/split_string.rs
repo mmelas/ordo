@@ -136,6 +136,7 @@ impl process::Process for SplitString {
                     }
                 }
                 let mut wslice = ws.unwrap();
+                let mut total_bytes = 0;
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
                     if slice.queue.fresh_val[ind] == false {
@@ -143,6 +144,7 @@ impl process::Process for SplitString {
                     }
                     match &slice.queue.buffer[ind] {
                         Some(line) => {
+                            total_bytes += line.len();
                             wslice = SplitString::split_bytes(self, line.clone(), selectivity, wslice, &mut total_words);
                             //unsafe{(*self.metrics).reserve_time.fetch_add(t1, std::sync::atomic::Ordering::SeqCst);}
                             //slice.queue.buffer[ind] = None;
@@ -157,6 +159,7 @@ impl process::Process for SplitString {
                 //println!("{} {}", total_lines, slice.len);
                 //println!("DLFKJ HEHEEYEYEYY {} {} {}", slice.len, total_lines, total_words);
                 unsafe{(*self.metrics).proc_metrics[self.id].update(total_lines, total_words)};
+		        unsafe{(*self.metrics).update_read_items(total_bytes as u64)};
                 //unsafe{println!("batch size {}, SLICE LEN{}, updated selec {}", batch_size, slice.len, (*self.metrics).proc_metrics[self.id].selectivity.load(std::sync::atomic::Ordering::SeqCst));}
                 //unsafe{println!("{}", (*self.metrics).proc_metrics[self.id].selectivity.load(std::sync::atomic::Ordering::SeqCst));}
 

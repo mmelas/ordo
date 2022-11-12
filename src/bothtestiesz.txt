@@ -1,0 +1,1 @@
+Run : 81, throughput avg : 1004216, runtime : 26.837867908s

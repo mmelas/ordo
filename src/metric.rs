@@ -36,7 +36,7 @@ pub struct Metric {
     pub not_entered_cnt : AtomicU64,
     pub total_amount_in : AtomicF64,
     pub total_amount_out : AtomicF64,
-    pub output_throughput_array : Mutex<Vec<i64>>
+    pub output_throughput_array : Mutex<Vec<u64>>
 }
 
 impl Metric {
@@ -44,7 +44,7 @@ impl Metric {
         Metric {p_id : p_id, tick : AtomicI64::new(0), inp_throughput : AtomicF64::new(0.0), 
                 out_throughput : AtomicI64::new(0), items_read : AtomicI64::new(0), start_time : Instant::now(),
                 items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in_per_run : AtomicI64::new(0),
-                selectivity : AtomicF64::new(100.0), select_cnt : AtomicI64::new(0), safety_margin : 0.3, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0), total_runs : AtomicI64::new(0), not_entered_cnt : AtomicU64::new(0), total_amount_in : AtomicF64::new(0.0), total_amount_out : AtomicF64::new(0.0), output_throughput_array : Mutex::new(Vec::new())}
+                selectivity : AtomicF64::new(1000.0), select_cnt : AtomicI64::new(0), safety_margin : 0.3, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0), total_runs : AtomicI64::new(0), not_entered_cnt : AtomicU64::new(0), total_amount_in : AtomicF64::new(0.0), total_amount_out : AtomicF64::new(0.0), output_throughput_array : Mutex::new(Vec::new())}
     }
 
     pub fn update(&mut self, amount_in : i64, amount_out : i64) {
@@ -183,8 +183,8 @@ impl Metric {
     }
 
 
-    pub fn save_throughput(&self) {
-        (*(self.output_throughput_array.lock().unwrap())).push(self.out_throughput.load(Ordering::SeqCst));
+    pub fn save_throughput(&self, inp : u64) {
+        (*(self.output_throughput_array.lock().unwrap())).push(inp);
     }
 }
 

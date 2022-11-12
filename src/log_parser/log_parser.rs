@@ -158,9 +158,9 @@ pub fn run() {
 
     let mut start_t = std::time::Instant::now();
     loop {
-        println!("HEYHEY");
-        thread::sleep(Duration::from_millis(500));
-        (metrics.proc_metrics[3]).save_throughput();
+        thread::sleep(Duration::from_millis(300));
+        //(metrics.proc_metrics[3]).save_throughput();
+        metrics.save_throughput();
         metrics.print_metrics();
         if start_t.elapsed().as_secs() >= 5
         {

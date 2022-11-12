@@ -168,19 +168,21 @@ impl process::Process for FileReader {
 
         t0 = std::time::Instant::now();
         let mut temp_batch_size = batch_size;
+        let mut total_bytes_read = 0;
         while temp_batch_size > 0 && current_pos < upper_bound {
             let mut next_line = vec![];
             temp_batch_size -= 1;
             let mut bytes_read = 0;
             while current_pos < upper_bound && bytes_read < 32_768 {
                 let line_bytes = buf_reader.read_until(b'\n', &mut next_line).unwrap() as u64;
+                total_bytes_read += line_bytes;
                 bytes_read += line_bytes;
                 current_pos += line_bytes;
             }
             unsafe{wslice.update(Some(Arc::new(next_line)))}
         } 
         t1 = t0.elapsed().as_nanos();
-        //unsafe{(*self.metrics).update_read_time(t1 as u64);}
+        unsafe{(*self.metrics).update_read_items(total_bytes_read);}
 
         unsafe{(*self.metrics).proc_metrics[self.id].update(batch_size, batch_size)}
 

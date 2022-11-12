@@ -134,7 +134,8 @@ impl process::Process for AppRegex {
                 if slice.len == 0 {
                     println!("HI");
                 }
-                unsafe{(*self.metrics).proc_metrics[self.id].update(words_read, total_matches)};
+                unsafe{(*self.metrics).update_read_items(words_read)};
+                unsafe{(*self.metrics).proc_metrics[self.id].update(words_read as i64, total_matches)};
                 //unsafe{(*self.metrics).proc_metrics[self.id].incr_hashtags(total_matches)};
                 slice.commit();
                 unsafe{wslice.commit()};
