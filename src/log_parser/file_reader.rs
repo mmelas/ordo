@@ -18,8 +18,8 @@ const WEIGHT : f64 = 0.10000;
 pub struct FileReader {
     id : usize,
     target : RwLock<i64>,
-    pub inputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
-    pub outputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
+    pub inputs: *mut fifo::Queue<Option<Arc<(Vec<u8>, std::time::Instant)>>>,
+    pub outputs: *mut fifo::Queue<Option<Arc<(Vec<u8>, std::time::Instant)>>>,
     pub lines: Mutex<Vec<(io::BufReader<File>, u64)>>,
     metrics: *mut Metrics<'static>
 }
@@ -34,8 +34,8 @@ impl FileReader {
 
     pub fn new_with_vector(
         id : usize,
-        ins : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
-        outs : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
+        ins : *mut fifo::Queue<Option<Arc<(Vec<u8>, std::time::Instant)>>>,
+        outs : *mut fifo::Queue<Option<Arc<(Vec<u8>, std::time::Instant)>>>,
         files : Vec<String>,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -55,8 +55,8 @@ impl FileReader {
 
     pub fn new_with_single(
         id : usize,
-        ins : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
-        outs : *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
+        ins : *mut fifo::Queue<Option<Arc<(Vec<u8>, std::time::Instant)>>>,
+        outs : *mut fifo::Queue<Option<Arc<(Vec<u8>, std::time::Instant)>>>,
         f_name : String, partitions : i64,
         metrics : *mut Metrics<'static>
     ) -> FileReader {
@@ -179,7 +179,7 @@ impl process::Process for FileReader {
                 bytes_read += line_bytes;
                 current_pos += line_bytes;
             }
-            unsafe{wslice.update(Some(Arc::new(next_line)))}
+            unsafe{wslice.update(Some(Arc::new((next_line, std::time::Instant::now()))))}
         } 
         t1 = t0.elapsed().as_nanos();
         unsafe{(*self.metrics).update_read_items(total_bytes_read);}

@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicI64, Ordering};
 use atomic_float::AtomicF64;
 use std::cmp;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use crate::params;
 use std::sync::Arc;
 use std::process;
@@ -36,7 +36,8 @@ pub struct Metric {
     pub not_entered_cnt : AtomicU64,
     pub total_amount_in : AtomicF64,
     pub total_amount_out : AtomicF64,
-    pub output_throughput_array : Mutex<Vec<u64>>
+    pub output_throughput_array : Mutex<Vec<u64>>,
+    pub latency_per_item : Mutex<Vec<Duration>>
 }
 
 impl Metric {
@@ -44,7 +45,7 @@ impl Metric {
         Metric {p_id : p_id, tick : AtomicI64::new(0), inp_throughput : AtomicF64::new(0.0), 
                 out_throughput : AtomicI64::new(0), items_read : AtomicI64::new(0), start_time : Instant::now(),
                 items_written : AtomicI64::new(0), hashtags_read : AtomicI64::new(0), total_amount_in_per_run : AtomicI64::new(0),
-                selectivity : AtomicF64::new(1000.0), select_cnt : AtomicI64::new(0), safety_margin : 0.3, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0), total_runs : AtomicI64::new(0), not_entered_cnt : AtomicU64::new(0), total_amount_in : AtomicF64::new(0.0), total_amount_out : AtomicF64::new(0.0), output_throughput_array : Mutex::new(Vec::new())}
+                selectivity : AtomicF64::new(100.0), select_cnt : AtomicI64::new(0), safety_margin : 0.3, epsilon : AtomicI64::new(0), extra_slices : AtomicI64::new(0), total_extra_slices : AtomicI64::new(0), total_runs : AtomicI64::new(0), not_entered_cnt : AtomicU64::new(0), total_amount_in : AtomicF64::new(0.0), total_amount_out : AtomicF64::new(0.0), output_throughput_array : Mutex::new(Vec::new()), latency_per_item : Mutex::new(Vec::new())}
     }
 
     pub fn update(&mut self, amount_in : i64, amount_out : i64) {
@@ -165,8 +166,10 @@ impl Metric {
 	let args: Vec<String> = env::args().collect();
 	let file_name = format!("/var/scratch/mmelas/both{}.txt", args[1]);
 	let file_name_throughput = format!("/var/scratch/mmelas/throughputs{}.txt", args[1]);
+	let file_name_latency = format!("/var/scratch/mmelas/latencies_per_item{}.txt", args[1]);
         let mut file = OpenOptions::new().append(true).create(true).open(file_name).expect("Unable to open file");
         let mut file2 = OpenOptions::new().append(true).create(true).open(file_name_throughput).expect("Unable to open file");
+        let mut file3 = OpenOptions::new().append(true).create(true).open(file_name_latency).expect("Unable to open file");
         let mut avg_throughput = 0;
         let mut cnt = 0;
         for val in &*self.output_throughput_array.lock().unwrap() {
@@ -174,6 +177,11 @@ impl Metric {
             cnt += 1;
 	    write!(file2, "Run : {}, throughput value : {}\n", params::RUN, &val);
             //file.write_all(val.()).expect("write failed");
+        }
+        for val in &*self.latency_per_item.lock().unwrap() {
+            if !val.is_zero() {
+                write!(file3, "Run : {}, latency item : {:?}\n", params::RUN, &val);
+            }
         }
         avg_throughput /= cnt;
 	    write!(file, "Thread : {}, Run : {}, throughput avg : {}, runtime : {:?}\n", PRODUCERS, params::RUN, avg_throughput, total_time);
@@ -185,6 +193,10 @@ impl Metric {
 
     pub fn save_throughput(&self, inp : u64) {
         (*(self.output_throughput_array.lock().unwrap())).push(inp);
+    }
+
+    pub fn update_latency_per_item(&self, mut inp : Vec<Duration>) {
+        (*(self.latency_per_item.lock().unwrap())).append(&mut inp);
     }
 }
 

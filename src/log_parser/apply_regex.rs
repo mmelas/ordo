@@ -5,6 +5,7 @@ use crate::metrics::Metrics;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::Ordering;
 use std::cmp::max;
+use std::time::Instant;
 
 // Operator that writes to its output queue the results
 // of applying a regex to everything that comes into its
@@ -15,8 +16,8 @@ const WEIGHT : f64 = 1.00000;
 pub struct AppRegex {
     id : usize,
     target : RwLock<i64>,
-    pub inputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
-    pub outputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
+    pub inputs: *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>,
+    pub outputs: *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>,
     pub metrics: *mut Metrics<'static>
 }
 
@@ -26,8 +27,8 @@ unsafe impl Sync for AppRegex {}
 impl AppRegex {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
-        outs : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
+        ins : *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>, 
+        outs : *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>, 
         metrics : *mut Metrics<'static>
     ) -> AppRegex {
         AppRegex {id : id, target : RwLock::new(params::TARGET_INIT), inputs : ins, outputs : outs, metrics: metrics}
@@ -102,7 +103,7 @@ impl process::Process for AppRegex {
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
                             words_read += 1;
-                            if word.0[word.1[0]] == b'a' {
+                            if word.0.0[word.1[0]] == b'a' {
                                 if wslice.curr_i == wslice.len {
                                     unsafe{wslice.commit();}
                                     loop {

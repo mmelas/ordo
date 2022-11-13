@@ -11,8 +11,8 @@ const WEIGHT : f64 = 1.000000;
 pub struct SplitString {
     id : usize,
     target : RwLock<i64>,
-    pub inputs: *mut fifo::Queue<Option<Arc<Vec<u8>>>>,
-    pub outputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
+    pub inputs: *mut fifo::Queue<Option<Arc<(Vec<u8>, Instant)>>>,
+    pub outputs: *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>,
     pub metrics : *mut Metrics<'static>
 }
 
@@ -22,28 +22,28 @@ unsafe impl Sync for SplitString {}
 impl SplitString {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<Option<Arc<Vec<u8>>>>, 
-        outs : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
+        ins : *mut fifo::Queue<Option<Arc<(Vec<u8>, Instant)>>>, 
+        outs : *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>, 
         metrics : *mut Metrics<'static>
     ) -> SplitString {
         SplitString {id : id, target : RwLock::new(params::TARGET_INIT), inputs : ins, outputs : outs, metrics : metrics}
     }
 
     fn split_bytes<'a>(&self, 
-                   inp : Arc<Vec<u8>>, 
+                   inp : Arc<(Vec<u8>, Instant)>, 
                    mut selectivity : f64,
-                   mut wslice : fifo::WritableSlice<'a, Option<(Arc<Vec<u8>>, [usize; 2])>>,
+                   mut wslice : fifo::WritableSlice<'a, Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>,
                    total_words : &mut i64)
-        -> fifo::WritableSlice<'a, Option<(Arc<Vec<u8>>, [usize; 2])>> {
+        -> fifo::WritableSlice<'a, Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>> {
         //println!("{}", selectivity);
         selectivity += selectivity * 0.3;
         let mut before_space = 0;
         let mut ind = 0;
-        let len = inp.len();
+        let len = inp.0.len();
 
 	let mut unwrapped_ws;
 
-        for b in inp.as_ref() {
+        for b in &inp.as_ref().0 {
             if ind == len - 1 || b == &b' ' || b == &b'\n' {
                 if before_space < ind {
                     if wslice.curr_i == wslice.len {
@@ -144,7 +144,7 @@ impl process::Process for SplitString {
                     }
                     match &slice.queue.buffer[ind] {
                         Some(line) => {
-                            total_bytes += line.len();
+                            total_bytes += line.0.len();
                             wslice = SplitString::split_bytes(self, line.clone(), selectivity, wslice, &mut total_words);
                             //unsafe{(*self.metrics).reserve_time.fetch_add(t1, std::sync::atomic::Ordering::SeqCst);}
                             //slice.queue.buffer[ind] = None;

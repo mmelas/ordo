@@ -4,6 +4,7 @@ use crate::params;
 use crate::metrics::Metrics;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 // Operator that writes to the terminal everything that
 // comes into its input Queue
@@ -13,8 +14,8 @@ const WEIGHT : f64 = (params::QUEUE_SIZE as usize) as f64;
 pub struct Output {
     id : usize,
     target : RwLock<i64>,
-    pub inputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
-    pub outputs: *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
+    pub inputs: *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>,
+    pub outputs: *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>,
     pub metrics: *mut Metrics<'static>
 }
 
@@ -24,8 +25,8 @@ unsafe impl Sync for Output {}
 impl Output {
     pub fn new(
         id : usize,
-        ins : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>, 
-        outs : *mut fifo::Queue<Option<(Arc<Vec<u8>>, [usize; 2])>>,
+        ins : *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>, 
+        outs : *mut fifo::Queue<Option<(Arc<(Vec<u8>, Instant)>, [usize; 2])>>,
         metrics: *mut Metrics<'static>
     ) -> Output {
         Output {id : id, target : RwLock::new(params::TARGET_INIT), inputs: ins, outputs: outs, metrics: metrics}
@@ -77,6 +78,7 @@ impl process::Process for Output {
         let mut total_matches = 0;
         match rslice {
             Some(mut slice) => {
+                let mut latencies = Vec::new();
                 for i in 0..slice.len {
                     let ind = (i + slice.offset) % params::QUEUE_SIZE;
                     //if slice.queue.fresh_val[ind] == false {
@@ -85,12 +87,14 @@ impl process::Process for Output {
                     match &slice.queue.buffer[ind] {
                         Some(word) => {
 			    total_matches += 1;
+                            latencies.push(word.0.1.elapsed());
                             slice.queue.buffer[ind] = None;
                      //       slice.queue.fresh_val[ind] = false;
                         },
                         None => {}
                     }
                 }
+                unsafe{(*self.metrics).proc_metrics[self.id].update_latency_per_item(latencies)};
                 if slice.len == 0 {
                     println!("HI");
                 }

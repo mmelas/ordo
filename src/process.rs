@@ -106,6 +106,7 @@ impl ProcessRunner {
             let _thread_pool = &*(self.thread_pool.lock().unwrap());
             _thread_pool.execute(move|| {
 		    if pi == params::PRODUCERS - 1 {
+                self.try_revive();
 				if change_plan_t.elapsed() > *next_time.lock().unwrap() {
 					let mut next_p = self.processes.len() - 1;
 					let mut curr_p = self.processes.len() - 2;
@@ -203,14 +204,25 @@ impl ProcessRunner {
                 //println!("pi : {}", pi);
             }
         }
+
+    pub fn try_revive(&self) {
+        let mut _thread_pool = self.thread_pool.lock().unwrap();
+        let thread_pool_size = _thread_pool.max_count();
+        if (thread_pool_size != params::PRODUCERS as usize){
+            println!("thread pool size before REVIVAL: {}", _thread_pool.max_count());
+           _thread_pool.set_num_threads(params::PRODUCERS as usize);
+            println!("thread pool size after REVIVAL: {}", _thread_pool.max_count());
+        }
+    }
+
     
     pub fn resize_thread_pool(&self) {
         let mut _thread_pool = self.thread_pool.lock().unwrap();
-        println!("thread pool size before : {}", _thread_pool.active_count());
-        let thread_pool_size = _thread_pool.active_count();
+        println!("thread pool size before : {}", _thread_pool.max_count());
+        let thread_pool_size = _thread_pool.max_count();
 
        _thread_pool.set_num_threads(max((thread_pool_size as f64 * params::DROP_RATIO) as usize, params::PRODUCERS as usize / 2));
-        println!("thread pool size after : {}", _thread_pool.active_count());
+        println!("thread pool size after : {}", _thread_pool.max_count());
     }
 
     fn print_process_priorities(&self) {
