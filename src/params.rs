@@ -7,6 +7,7 @@ pub const READ_SLICE_S : usize = 1000;
 pub const PERIOD : i64 = 1000;
 pub const TARGET_INIT : i64 = 1_00;
 pub const RUN : i64 = 1;
+pub const DROP_RATIO : f64 = 0.9;
 
 pub struct Params {
 }

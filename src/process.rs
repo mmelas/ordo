@@ -43,7 +43,7 @@ impl Eq for dyn Process {
 }
 
 pub struct ProcessRunner {
-    pub thread_pool: threadpool::ThreadPool,
+    pub thread_pool: Mutex<threadpool::ThreadPool>,
     //pub processes: Vec<Box<dyn Process>>,
     pub processes: Vec<&'static mut dyn Process>,
     pub metrics: *mut Metrics<'static>,
@@ -57,7 +57,7 @@ unsafe impl Sync for ProcessRunner {}
 impl ProcessRunner {
     pub fn new(metrics : *mut Metrics<'static>) -> ProcessRunner {
         return ProcessRunner {
-            thread_pool : threadpool::ThreadPool::new(params::PRODUCERS as usize), 
+            thread_pool : Mutex::new(threadpool::ThreadPool::new(params::PRODUCERS as usize)), 
             processes : Vec::new(),
             metrics: metrics,
             ordered_procs: Mutex::new(BinaryHeap::new())
@@ -77,7 +77,8 @@ impl ProcessRunner {
         let proc_t2 = Arc::new(AtomicU64::new(0));
         let proc_t3 = Arc::new(AtomicU64::new(0));
         let proc_t4 = Arc::new(AtomicU64::new(0));
-        let next_time = Arc::new(Mutex::new(std::time::Duration::from_millis(500)));
+        let next_time = Arc::new(Mutex::new(std::time::Duration::from_millis(100)));
+        let next_time_resize = Arc::new(Mutex::new(std::time::Duration::from_secs(5)));
 
         for i in 0..self.processes.len() {
             self.ordered_procs.lock().unwrap().push(self.processes[i]); 
@@ -100,14 +101,16 @@ impl ProcessRunner {
             let proc_t3 = proc_t3.clone();
             let proc_t4 = proc_t4.clone();
             let next_time = next_time.clone();
-            self.thread_pool.execute(move || {
+            let next_time_resize = next_time_resize.clone();
+
+            let _thread_pool = &*(self.thread_pool.lock().unwrap());
+            _thread_pool.execute(move|| {
 		    if pi == params::PRODUCERS - 1 {
 				if change_plan_t.elapsed() > *next_time.lock().unwrap() {
-					change_plan_t = std::time::Instant::now();
 					let mut next_p = self.processes.len() - 1;
 					let mut curr_p = self.processes.len() - 2;
                     let mut curr_time = *next_time.lock().unwrap();
-                    *next_time.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_millis(500)).unwrap();
+                    *next_time.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_millis(100)).unwrap();
 					let mut next_p_diff = max(LAST_QUEUE_LIMIT - self.processes[next_p].activation(), 0);
 					//println!("{} {} {}", LAST_QUEUE_LIMIT, self.processes[next_p].activation(), next_p_diff);
 					self.processes[next_p].set_target(next_p_diff);
@@ -133,8 +136,14 @@ impl ProcessRunner {
 					    }
 					}
 					//ProcessRunner::print_process_priorities(self);
-                    unsafe{(*self.metrics).proc_metrics[3].save_throughput();}
-                    unsafe{(*self.metrics).print_metrics();}
+                    unsafe{(*self.metrics).save_throughput();}
+                    if change_plan_t.elapsed() > *next_time_resize.lock().unwrap() {
+
+                        unsafe{(*self.metrics).print_metrics();}
+                        let mut curr_time = *next_time_resize.lock().unwrap();
+                        *next_time_resize.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_secs(5)).unwrap();
+                        self.resize_thread_pool();
+                    }
 				}
 		    }
                 let mut t0 = Instant::now();
@@ -195,10 +204,13 @@ impl ProcessRunner {
             }
         }
     
-    pub fn resize_thread_pool(&mut self) {
-        println!("thread pool size before : {}", self.thread_pool.active_count());
-       self.thread_pool.set_num_threads(max(self.thread_pool.active_count() - 10, params::PRODUCERS as usize / 2));
-        println!("thread pool size after : {}", self.thread_pool.active_count());
+    pub fn resize_thread_pool(&self) {
+        let mut _thread_pool = self.thread_pool.lock().unwrap();
+        println!("thread pool size before : {}", _thread_pool.active_count());
+        let thread_pool_size = _thread_pool.active_count();
+
+       _thread_pool.set_num_threads(max((thread_pool_size as f64 * params::DROP_RATIO) as usize, params::PRODUCERS as usize / 2));
+        println!("thread pool size after : {}", _thread_pool.active_count());
     }
 
     fn print_process_priorities(&self) {
