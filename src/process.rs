@@ -78,7 +78,7 @@ impl ProcessRunner {
         let proc_t3 = Arc::new(AtomicU64::new(0));
         let proc_t4 = Arc::new(AtomicU64::new(0));
         let next_time = Arc::new(Mutex::new(std::time::Duration::from_millis(100)));
-        let next_time_resize = Arc::new(Mutex::new(std::time::Duration::from_secs(5)));
+        let next_time_resize = Arc::new(Mutex::new(std::time::Duration::from_secs(4)));
 
         for i in 0..self.processes.len() {
             self.ordered_procs.lock().unwrap().push(self.processes[i]); 
@@ -105,13 +105,23 @@ impl ProcessRunner {
 
             let _thread_pool = &*(self.thread_pool.lock().unwrap());
             _thread_pool.execute(move|| {
-		    if pi == params::PRODUCERS - 1 {
-                self.try_revive();
+			if pi == 1 {
+
+			    if change_plan_t.elapsed() > *next_time_resize.lock().unwrap() {
+
+				unsafe{(*self.metrics).print_metrics();}
+				let mut curr_time = *next_time_resize.lock().unwrap();
+				*next_time_resize.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_secs(5)).unwrap();
+				//self.resize_thread_pool();
+			    }
+			}
+		    if pi == 2 {
+                //self.try_revive();
 				if change_plan_t.elapsed() > *next_time.lock().unwrap() {
 					let mut next_p = self.processes.len() - 1;
 					let mut curr_p = self.processes.len() - 2;
                     let mut curr_time = *next_time.lock().unwrap();
-                    *next_time.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_millis(100)).unwrap();
+                    *next_time.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_millis(500)).unwrap();
 					let mut next_p_diff = max(LAST_QUEUE_LIMIT - self.processes[next_p].activation(), 0);
 					//println!("{} {} {}", LAST_QUEUE_LIMIT, self.processes[next_p].activation(), next_p_diff);
 					self.processes[next_p].set_target(next_p_diff);
@@ -138,13 +148,6 @@ impl ProcessRunner {
 					}
 					//ProcessRunner::print_process_priorities(self);
                     unsafe{(*self.metrics).save_throughput();}
-                    if change_plan_t.elapsed() > *next_time_resize.lock().unwrap() {
-
-                        unsafe{(*self.metrics).print_metrics();}
-                        let mut curr_time = *next_time_resize.lock().unwrap();
-                        *next_time_resize.lock().unwrap() = curr_time.checked_add(std::time::Duration::from_secs(5)).unwrap();
-                        self.resize_thread_pool();
-                    }
 				}
 		    }
                 let mut t0 = Instant::now();
@@ -221,7 +224,7 @@ impl ProcessRunner {
         println!("thread pool size before : {}", _thread_pool.max_count());
         let thread_pool_size = _thread_pool.max_count();
 
-       _thread_pool.set_num_threads(max((thread_pool_size as f64 * params::DROP_RATIO) as usize, params::PRODUCERS as usize / 2));
+       _thread_pool.set_num_threads(max((thread_pool_size as f64 * params::DROP_RATIO) as usize, 2));
         println!("thread pool size after : {}", _thread_pool.max_count());
     }
 

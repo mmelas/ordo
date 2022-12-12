@@ -178,11 +178,17 @@ impl Metric {
 	    write!(file2, "Run : {}, throughput value : {}\n", params::RUN, &val);
             //file.write_all(val.()).expect("write failed");
         }
-        for val in &*self.latency_per_item.lock().unwrap() {
-            if !val.is_zero() {
-                write!(file3, "Run : {}, latency item : {:?}\n", params::RUN, &val);
-            }
-        }
+//	let mut cnt = 0;
+        //for val in &*self.latency_per_item.lock().unwrap() {
+	//    if cnt == 100{
+	//
+//		    if !val.is_zero() {
+//			write!(file3, "Run : {}, latency item : {:?}\n", params::RUN, &val);
+//		    }
+//			cnt = 0;
+//		}
+//		cnt += 1;
+ //       }
         avg_throughput /= cnt;
 	    write!(file, "Thread : {}, Run : {}, throughput avg : {}, runtime : {:?}\n", PRODUCERS, params::RUN, avg_throughput, total_time);
         println!("Data appended successfuly");
